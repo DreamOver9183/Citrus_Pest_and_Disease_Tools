@@ -1,0 +1,21 @@
+# Docker 映像檔專用相依（本機 venv 不安裝）
+#
+# TFLite 匯出走 ultralytics 的 litert 路徑（PyTorch 直轉，不經過 ONNX）。
+# 這條路只在 Linux x86_64 與 macOS 有輪子，且 exporter 內有
+#   assert MACOS or (LINUX and not ARM64)
+# 因此在 Windows 本機無法使用，只裝進容器。
+#
+# 為什麼不用 ONNX -> TFLite（saved_model 路徑）：
+#   ultralytics[export-tensorflow] 要求 numpy<2.0.0（python<3.13），
+#   而 ultralytics 傳遞相依的 opencv-python 5.x 要求 numpy>=2。
+#   在 python:3.12-slim 上兩者無解，pip 只能降級 opencv 或 numpy，
+#   等於在執行中的推論堆疊底下抽換套件。litert 路徑沒有 numpy 限制。
+#
+# 注意：這些套件沒有 aarch64 輪子，映像檔必須以 linux/amd64 建置
+#（docker-compose.yml 已明確指定 platform）。
+
+-r requirements.txt
+
+litert-torch>=0.9.0
+ai-edge-litert>=2.1.4
+ai-edge-quantizer>=0.6.0

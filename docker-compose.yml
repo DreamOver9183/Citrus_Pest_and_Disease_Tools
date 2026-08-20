@@ -1,0 +1,25 @@
+services:
+  citrus-detection-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # TFLite (LiteRT) 匯出的相依套件只有 linux/amd64 與 darwin 輪子，且 exporter 內
+    # 有 assert MACOS or (LINUX and not ARM64)。在 ARM 主機上若讓 Docker 自動選
+    # linux/arm64，匯出會斷言失敗且套件根本裝不起來，因此明確釘住平台。
+    platform: linux/amd64
+    container_name: citrus_detection_container
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount datasets and preloaded YOLO runs from host as read-only
+      - ./Datasets:/app/Datasets:ro
+      # Mount extracted_runs as read-write to save metrics & prediction logs
+      - ./ShowResultsWeb/backend/extracted_runs:/app/backend/extracted_runs
+    environment:
+      - PYTHONUNBUFFERED=1
+      # 映像檔把專案攤平成 /app/backend（沒有 ShowResultsWeb 這層），
+      # config.py 的 BACKEND_DIR.parent.parent 會多往上一層算到 "/"，
+      # 導致 SAMPLES_DIR 變成 /Datasets/samples 而非實際掛載點 /app/Datasets/samples。
+      # 明確指定 PROJECT_ROOT 讓樣本與報表路徑對齊容器內的實際結構。
+      - PROJECT_ROOT=/app
+    restart: unless-stopped

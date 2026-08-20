@@ -1,0 +1,193 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: 'Outfit', 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #030712;
+}
+
+/* Glassmorphism styling utilities with subtle color variations */
+.glass-panel {
+  background: rgba(8, 14, 32, 0.45);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glass-card {
+  background: rgba(12, 21, 46, 0.35);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card-hover:hover {
+  background: rgba(20, 32, 70, 0.5);
+  border-color: rgba(249, 115, 22, 0.3);
+  box-shadow: 0 12px 30px -10px rgba(249, 115, 22, 0.2);
+  transform: translateY(-2px);
+}
+
+/* Custom premium scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #030712;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(249, 115, 22, 0.4);
+}
+
+.animate-glow {
+  box-shadow: 0 0 25px 4px rgba(249, 115, 22, 0.18);
+}
+
+.animate-glow-indigo {
+  box-shadow: 0 0 25px 4px rgba(99, 102, 241, 0.18);
+}
+
+.animate-glow-emerald {
+  box-shadow: 0 0 25px 4px rgba(16, 185, 129, 0.18);
+}
+
+.animate-glow-rose {
+  box-shadow: 0 0 25px 4px rgba(244, 63, 94, 0.18);
+}
+
+/* Premium ambient color highlights */
+.bg-radial-gradient-teal {
+  background: radial-gradient(circle at center, rgba(20, 184, 166, 0.12) 0%, transparent 65%);
+}
+
+.bg-radial-gradient-indigo {
+  background: radial-gradient(circle at center, rgba(99, 102, 241, 0.12) 0%, transparent 65%);
+}
+
+.bg-radial-gradient-orange {
+  background: radial-gradient(circle at center, rgba(249, 115, 22, 0.12) 0%, transparent 65%);
+}
+
+.bg-radial-gradient-rose {
+  background: radial-gradient(circle at center, rgba(244, 63, 94, 0.1) 0%, transparent 65%);
+}
+
+/* New custom dashboard layout glows */
+.border-gradient-orange {
+  border-image: linear-gradient(to right, #f97316, #fb923c, transparent) 1;
+}
+
+.border-gradient-indigo {
+  border-image: linear-gradient(to right, #6366f1, #818cf8, transparent) 1;
+}
+
+/* Custom Markdown styling rules */
+.markdown-content h1 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 0.25rem;
+}
+
+.markdown-content h2 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #f97316; /* orange-500 */
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.markdown-content h3 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.markdown-content p {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  line-height: 1.6;
+  color: #cbd5e1; /* slate-300 */
+}
+
+.markdown-content ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.markdown-content ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.markdown-content li {
+  margin-bottom: 0.25rem;
+  line-height: 1.5;
+  color: #cbd5e1;
+}
+
+.markdown-content code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.85em;
+  background-color: rgba(255, 255, 255, 0.08);
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  color: #f472b6; /* pink-400 */
+}
+
+.markdown-content pre {
+  background-color: #030712; /* slate-950 */
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: #cbd5e1;
+  font-size: 0.9em;
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid #f97316;
+  background: rgba(249, 115, 22, 0.05);
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  border-radius: 0 8px 8px 0;
+  color: #d1d5db;
+}
+
+.markdown-content blockquote p {
+  margin-bottom: 0;
+}
+

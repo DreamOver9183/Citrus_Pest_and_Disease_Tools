@@ -1,0 +1,3 @@
+-r requirements.txt
+pytest
+httpx  # fastapi.testclient 需要

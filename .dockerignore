@@ -1,0 +1,30 @@
+# Git and editor
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Python caches and virtual envs
+**/__pycache__/
+**/.pytest_cache/
+**/.venv/
+**/venv/
+**/env/
+
+# Frontend build and dependencies (avoid overwriting container node_modules)
+ShowResultsWeb/frontend/node_modules/
+ShowResultsWeb/frontend/dist/
+
+# Backend runtime outputs and temp
+ShowResultsWeb/backend/extracted_runs/
+ShowResultsWeb/backend/temp/
+temp/
+
+# Large local data not needed in build context
+Datasets/
+OldDATA/
+results_v3/
+
+# OS junk
+.DS_Store
+Thumbs.db

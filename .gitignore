@@ -1,0 +1,51 @@
+# Python caches and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Node/React dependencies and production outputs
+ShowResultsWeb/frontend/node_modules/
+ShowResultsWeb/frontend/dist/
+ShowResultsWeb/frontend/.env*
+ShowResultsWeb/frontend/npm-debug.log*
+
+# lockfiles (can be regenerated)
+ShowResultsWeb/frontend/package-lock.json
+
+# YOLO temporary directories and output weights
+ShowResultsWeb/backend/extracted_runs/
+ShowResultsWeb/backend/temp/
+temp/
+
+# model files and large weights (if accidentally committed)
+*.pt
+
+# Large datasets and models (excludes raw data files and model weights from Git tracking)
+Datasets/
+Model/
+
+# Local-only manual test assets (multi-GB sample archives, never meant for version control)
+Test tools/
+
+# Jupyter and notebooks
+*.ipynb
+
+# Logs and databases
+*.log
+*.sqlite3
+*.db
+
+# IDE and OS configurations
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Generated reports (keep source markdown, ignore generated HTML if desired)
+# reports/*.html

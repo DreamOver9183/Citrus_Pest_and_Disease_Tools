@@ -1,0 +1,20 @@
+export const METRICS_OPTIONS = [
+  { key: 'train_box_loss', name: '訓練 Box 損失 (Train Box Loss)', desc: '邊界框擬合精準度收斂值' },
+  { key: 'train_cls_loss', name: '訓練 Class 損失 (Train Class Loss)', desc: '類別分類交叉熵收斂速度' },
+  { key: 'train_dfl_loss', name: '訓練 DFL 損失 (Train DFL Loss)', desc: '邊界框機率分佈收斂指標' },
+  { key: 'val_box_loss', name: '驗證 Box 損失 (Val Box Loss)', desc: '驗證集邊界框損失（防過擬合）' },
+  { key: 'val_cls_loss', name: '驗證 Class 損失 (Val Class Loss)', desc: '驗證集類別分類損失（防過擬合）' },
+  { key: 'precision', name: '精確率 (Precision)', desc: '預測為正樣本中真實為正的比例' },
+  { key: 'recall', name: '召回率 (Recall)', desc: '真實正樣本中成功偵測出的比例' },
+  { key: 'mAP50', name: '平均精度 mAP@50', desc: 'IoU=0.5 條件下的平均精確度' },
+  { key: 'mAP50_95', name: '平均精度 mAP@50:95', desc: '嚴格跨 IoU 閾值之綜合精度' },
+  { key: 'BoxF1_curve', name: 'F1 曲線 (BoxF1_curve)', desc: '置信度與 F1 分數平衡關係曲線' },
+  { key: 'BoxP_curve', name: '精確率曲線 (BoxP_curve)', desc: '置信度與精確度對應關係' },
+  { key: 'BoxPR_curve', name: 'PR 曲線 (BoxPR_curve)', desc: '精確率與召回率學術對比曲線' },
+  { key: 'BoxR_curve', name: '召回率曲線 (BoxR_curve)', desc: '置信度與召回率對應關係' },
+  { key: 'confusion_matrix_normalized', name: '正規化混淆矩陣', desc: '全類別預測分類正規化矩陣' },
+  { key: 'ssd_train_loss', name: 'SSD 訓練損失 (Train Loss)', desc: 'SSD-MobileNet 訓練集損失曲線', arch: 'ssd' },
+  { key: 'ssd_val_loss',   name: 'SSD 驗證損失 (Val Loss)',   desc: 'SSD-MobileNet 驗證集損失曲線（防過擬合）', arch: 'ssd' },
+  { key: 'ssd_mAP',        name: 'SSD mAP (0.5:0.95)',        desc: 'SSD-MobileNet 嚴格精度指標', arch: 'ssd' },
+  { key: 'ssd_mAP_50',     name: 'SSD mAP@50',                desc: 'SSD-MobileNet IoU=0.5 精度指標', arch: 'ssd' }
+];
