@@ -25,6 +25,9 @@ def _resolve_paths():
     SAMPLES_DIR = Path(os.environ.get("SAMPLES_DIR", PROJECT_ROOT / "Datasets" / "samples")).resolve()
     IMAGES_DIR = Path(os.environ.get("IMAGES_DIR", EXTRACTED_RUNS_DIR / "images")).resolve()
     EXPORTS_DIR = Path(os.environ.get("EXPORTS_DIR", EXTRACTED_RUNS_DIR / "exports")).resolve()
+    # 使用者手動放置模型/資料集的固定目錄，供「本機資料庫掃描」功能就地讀取。
+    # 與 Datasets/ 同層級。本系統只會建立這個目錄並讀取其內容，絕不寫入或刪除裡面的檔案。
+    LOCAL_LIBRARY_DIR = Path(os.environ.get("LOCAL_LIBRARY_DIR", PROJECT_ROOT / "LocalLibrary")).resolve()
 
     return {
         "PROJECT_ROOT": PROJECT_ROOT,
@@ -35,6 +38,7 @@ def _resolve_paths():
         "SAMPLES_DIR": SAMPLES_DIR,
         "IMAGES_DIR": IMAGES_DIR,
         "EXPORTS_DIR": EXPORTS_DIR,
+        "LOCAL_LIBRARY_DIR": LOCAL_LIBRARY_DIR,
     }
 
 
@@ -48,6 +52,7 @@ REPORTS_DIR = _PATHS["REPORTS_DIR"]
 SAMPLES_DIR = _PATHS["SAMPLES_DIR"]
 IMAGES_DIR = _PATHS["IMAGES_DIR"]
 EXPORTS_DIR = _PATHS["EXPORTS_DIR"]
+LOCAL_LIBRARY_DIR = _PATHS["LOCAL_LIBRARY_DIR"]
 
 # 上傳檔案暫存目錄（絕對路徑，不受啟動時 cwd 影響）
 UPLOAD_TEMP_DIR = Path(os.environ.get("UPLOAD_TEMP_DIR", BACKEND_DIR / "temp")).resolve()
@@ -93,7 +98,7 @@ CORS_ALLOWED_ORIGINS = [
 
 def ensure_dirs():
     """Create standard directories if missing (idempotent)."""
-    for p in [EXTRACTED_RUNS_DIR, TEMP_DIR, REPORTS_DIR, SAMPLES_DIR, IMAGES_DIR, UPLOAD_TEMP_DIR, EXPORTS_DIR]:
+    for p in [EXTRACTED_RUNS_DIR, TEMP_DIR, REPORTS_DIR, SAMPLES_DIR, IMAGES_DIR, UPLOAD_TEMP_DIR, EXPORTS_DIR, LOCAL_LIBRARY_DIR]:
         try:
             p.mkdir(parents=True, exist_ok=True)
         except Exception:
@@ -109,6 +114,7 @@ __all__ = [
     "SAMPLES_DIR",
     "IMAGES_DIR",
     "EXPORTS_DIR",
+    "LOCAL_LIBRARY_DIR",
     "UPLOAD_TEMP_DIR",
     "MAX_SESSIONS",
     "MAX_DATASETS",

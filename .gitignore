@@ -32,6 +32,9 @@ Model/
 # Local-only manual test assets (multi-GB sample archives, never meant for version control)
 Test tools/
 
+# User-supplied local model/dataset library (scanned in place, never version-controlled)
+LocalLibrary/
+
 # Jupyter and notebooks
 *.ipynb
 

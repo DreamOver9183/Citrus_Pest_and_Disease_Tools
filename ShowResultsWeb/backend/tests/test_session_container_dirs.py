@@ -65,3 +65,35 @@ def test_delete_session_removes_its_own_leaf_under_weight(tmp_path, monkeypatch)
     assert container_dir.exists()
     assert sentinel.exists()
     assert not leaf.exists(), "weight/ 底下該 session 自己的目錄應被刪除"
+
+
+def test_delete_session_never_touches_paths_outside_extracted_runs(tmp_path, monkeypatch):
+    """
+    回歸測試：LocalLibrary 來源的 session，其 dir_path 完全不含 "extracted_runs"。
+
+    既有的參數化測試只涵蓋「extracted_runs/ 底下的各種容器名稱」，從未測過
+    「路徑根本不在 extracted_runs 之內」這個形狀——而那正是 LocalLibrary 的形狀。
+    刪除這種 session 只能移除記憶體項目，絕不能碰使用者的實體檔案。
+    """
+    library = tmp_path / "LocalLibrary" / "my_run"
+    (library / "weights").mkdir(parents=True)
+    weights = library / "weights" / "best.pt"
+    weights.write_bytes(b"user-owned")
+    (library / "args.yaml").write_text("epochs: 10\n", encoding="utf-8")
+
+    monkeypatch.setattr(session_manager, "SESSIONS_FILE", str(tmp_path / "sessions.json"))
+    session_manager.ACTIVE_SESSIONS["run_locallib1"] = {
+        "session_id": "run_locallib1",
+        "dir_path": str(library).replace("\\", "/"),
+        "weights_path": str(weights).replace("\\", "/"),
+        "model_arch": "yolo",
+        "source": "local_library",
+    }
+
+    session_manager.delete_session("run_locallib1")
+
+    assert "run_locallib1" not in session_manager.ACTIVE_SESSIONS
+    assert library.exists(), "使用者的資料夾絕不能被刪除"
+    assert weights.exists(), "使用者的權重檔絕不能被刪除"
+    assert weights.read_bytes() == b"user-owned"
+    assert (tmp_path / "LocalLibrary").exists()

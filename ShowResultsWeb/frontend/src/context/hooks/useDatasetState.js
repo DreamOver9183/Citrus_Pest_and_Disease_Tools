@@ -98,6 +98,9 @@ export const useDatasetState = () => {
 
   return {
     datasets,
+    // 供本機資料夾掃描把回應快照推進來（掃描回應同時帶 sessions 與 datasets，
+    // 分屬不同 hook，由 ExperimentContext 在 Provider 層協調）
+    setDatasets,
     datasetCount,
     datasetsLoading,
     activeDatasetId,

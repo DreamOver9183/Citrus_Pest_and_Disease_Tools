@@ -3,6 +3,7 @@ import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
 import { useExperiment } from '../context/ExperimentContext';
 import ExportPanel from './system-specs/ExportPanel';
+import LocalLibraryPanel from './system-specs/LocalLibraryPanel';
 import { Archive, Cpu, CheckCircle2, AlertCircle, RefreshCw, Trash2, Edit2, Server, Monitor, Sparkles, Database, FileCode, HardDrive } from 'lucide-react';
 
 const SystemSpecs = () => {
@@ -203,6 +204,9 @@ const SystemSpecs = () => {
               </div>
             </div>
           </div>
+
+          {/* 本機資料夾掃描面板 */}
+          <LocalLibraryPanel />
 
           {/* 裝置選擇器面板 */}
           <div className="glass-panel p-6 rounded-2xl border border-white/[0.06] shadow-xl space-y-4">

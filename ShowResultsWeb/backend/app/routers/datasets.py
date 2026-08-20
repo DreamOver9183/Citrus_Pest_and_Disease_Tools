@@ -13,6 +13,7 @@ from app.services.dataset_manager import (
     get_datasets_snapshot,
     register_dataset,
 )
+from app.utils.dataset_zip import ZipArchiveReader
 from app.utils.zip_handler import ZipIndexError
 
 router = APIRouter()
@@ -57,7 +58,8 @@ def upload_dataset(file: UploadFile = File(...)):
 
         try:
             with zipfile.ZipFile(file.file) as zip_ref:
-                stats = analyze_dataset(zip_ref, zip_name=filename, zip_size_bytes=zip_size)
+                reader = ZipArchiveReader(zip_ref, zip_size_bytes=zip_size)
+                stats = analyze_dataset(reader, zip_name=filename, zip_size_bytes=zip_size)
         except zipfile.BadZipFile:
             return {"status": "error", "message": "ZIP 檔案損毀或格式不正確"}
         except ZipIndexError as exc:

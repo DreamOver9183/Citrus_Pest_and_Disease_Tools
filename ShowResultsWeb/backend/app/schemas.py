@@ -13,6 +13,8 @@ from pydantic import BaseModel
 
 class SessionOut(BaseModel):
     session_id: str
+    # "local_library" 代表來自本機資料夾掃描（不落地持久化）；一般上傳為 None
+    source: Optional[str] = None
     zip_name: Optional[str] = None
     source_type: Optional[str] = None
     format_label: Optional[str] = None
@@ -174,6 +176,8 @@ class DatasetStatsOut(BaseModel):
     classes: List[DatasetClassStat] = []
     prefix_check: Optional[DatasetPrefixCheck] = None
     definition: Optional[DatasetDefinition] = None
+    # 來源目錄絕對路徑；僅本機資料夾掃描會有值
+    source_path: Optional[str] = None
     issues: List[DatasetIssue] = []
 
     model_config = {"extra": "allow"}
@@ -246,3 +250,21 @@ class ExportJobResponse(BaseModel):
 class ExportJobsResponse(BaseModel):
     status: str
     jobs: Dict[str, ExportJobOut] = {}
+
+
+# --- 本機資料夾掃描 ---
+class LocalLibraryInfoResponse(BaseModel):
+    status: str
+    path: str
+    exists: bool
+
+
+class LocalLibraryScanResponse(BaseModel):
+    status: str
+    registered_sessions: List[str] = []
+    registered_datasets: List[str] = []
+    skipped_sessions: int = 0
+    skipped_datasets: int = 0
+    message: Optional[str] = None
+    sessions: Dict[str, SessionOut] = {}
+    datasets: Dict[str, DatasetStatsOut] = {}

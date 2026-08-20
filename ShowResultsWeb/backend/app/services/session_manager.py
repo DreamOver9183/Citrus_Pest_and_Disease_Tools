@@ -18,7 +18,13 @@ def save_sessions_to_disk():
     try:
         os.makedirs(os.path.dirname(SESSIONS_FILE), exist_ok=True)
         with SESSIONS_LOCK:
-            snapshot = dict(ACTIVE_SESSIONS)
+            # LocalLibrary 掃描而來的 session 刻意不落地：它們引用的是使用者本機
+            # 資料夾內的檔案，語意上只在「本次執行期間」有效。重啟後使用者重新
+            # 按一次掃描即可，而不是留下一堆指向可能已被搬動/刪除的路徑的紀錄。
+            snapshot = {
+                sid: sdata for sid, sdata in ACTIVE_SESSIONS.items()
+                if sdata.get("source") != "local_library"
+            }
         with open(SESSIONS_FILE, "w", encoding="utf-8") as f:
             json.dump(snapshot, f, ensure_ascii=False, indent=2)
     except Exception as e:

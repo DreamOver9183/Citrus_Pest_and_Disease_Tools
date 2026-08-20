@@ -4,10 +4,12 @@ import { useDeviceControl } from './hooks/useDeviceControl';
 import { useLiveDemoState } from './hooks/useLiveDemoState';
 import { useDatasetState } from './hooks/useDatasetState';
 import { useModelExport } from './hooks/useModelExport';
+import { useLocalLibrary } from './hooks/useLocalLibrary';
 
 const ExperimentContext = createContext();
 
-// 這個 Provider 是五個獨立 hook（session / device / live-demo / dataset / export 狀態）的組合層，
+// 這個 Provider 是六個獨立 hook（session / device / live-demo / dataset / export /
+// local-library 狀態）的組合層，
 // 目的是讓既有的 useExperiment() 呼叫點維持單一、扁平的 API，不必逐一遷移。
 export const ExperimentProvider = ({ children }) => {
   const [activeTab, setActiveTab] = useState('init'); // 'init', 'metrics', 'demo', 'dataset'
@@ -17,6 +19,18 @@ export const ExperimentProvider = ({ children }) => {
   const liveDemoState = useLiveDemoState();
   const datasetState = useDatasetState();
   const exportState = useModelExport();
+  const localLibraryState = useLocalLibrary();
+
+  // 掃描回應同時帶回 sessions 與 datasets 兩份快照，分屬不同 hook——
+  // 與 deleteSession 同樣的理由，跨 hook 的協調邏輯放在 Provider 層。
+  const scanLocalLibrary = async () => {
+    const result = await localLibraryState.scanLocalLibrary();
+    if (result.success) {
+      sessionsState.setSessions(result.sessions);
+      datasetState.setDatasets(result.datasets);
+    }
+    return result.success;
+  };
 
   // 刪除 Session 後，若已無任何 Session 則重置回初始分頁
   const deleteSession = async (session_id) => {
@@ -34,7 +48,9 @@ export const ExperimentProvider = ({ children }) => {
       ...liveDemoState,
       ...datasetState,
       ...exportState,
+      ...localLibraryState,
       deleteSession,
+      scanLocalLibrary,
       activeTab,
       setActiveTab
     }}>

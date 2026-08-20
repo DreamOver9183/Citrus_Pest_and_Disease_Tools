@@ -39,10 +39,7 @@ from app.utils.dataset_zip import (
     JSON_MEMBER_CAP_BYTES,
     TextBudget,
     VirtualTree,
-    build_virtual_tree,
     decode_text,
-    enforce_archive_limits,
-    read_member_capped,
 )
 from app.utils.zip_handler import ZipIndexError
 
@@ -107,6 +104,9 @@ def _base_result(zip_name: str) -> Dict[str, Any]:
             "samples": [],
         },
         "definition": None,
+        # 來源目錄的絕對路徑。僅 LocalLibrary 掃描會填值；ZIP 上傳恆為 None。
+        # 同時作為去重鍵與「不寫入 datasets.json」的持久化過濾標記。
+        "source_path": None,
         "issues": [],
     }
 
@@ -115,12 +115,12 @@ def _base_result(zip_name: str) -> Dict[str, Any]:
 # YOLO
 # --------------------------------------------------------------------------- #
 
-def _parse_data_yaml(zip_ref: zipfile.ZipFile, yaml_path: str,
+def _parse_data_yaml(reader, yaml_path: str,
                      issues: List[Dict[str, Any]]) -> Dict[str, Any]:
     """解析 data.yaml。任何失敗都降級為警告，不中斷分析。"""
     out = {"nc": None, "names": None, "raw_text": None, "filename": posixpath.basename(yaml_path)}
     try:
-        raw = read_member_capped(zip_ref, yaml_path)
+        raw = reader.read(yaml_path)
     except ZipIndexError as exc:
         issues.append(_issue("warning", "W_NO_DATA_YAML", "無法讀取 data.yaml", str(exc)))
         return out
@@ -208,7 +208,7 @@ def _scan_label_file(text: str, malformed: List[str], rel_path: str) -> Optional
     return ids
 
 
-def _analyze_yolo(zip_ref: zipfile.ZipFile, tree: VirtualTree, detection,
+def _analyze_yolo(reader, tree: VirtualTree, detection,
                   result: Dict[str, Any]) -> None:
     from app.services.dataset_detector import _find_split_dirs
 
@@ -219,7 +219,7 @@ def _analyze_yolo(zip_ref: zipfile.ZipFile, tree: VirtualTree, detection,
     # --- data.yaml（只用於交叉驗證） ---
     yaml_path = detection.extra.get("yaml_path")
     if yaml_path:
-        parsed = _parse_data_yaml(zip_ref, yaml_path, issues)
+        parsed = _parse_data_yaml(reader, yaml_path, issues)
         result["declared_nc"] = parsed["nc"]
         result["declared_names"] = parsed["names"]
         if parsed["raw_text"] is not None:
@@ -268,7 +268,7 @@ def _analyze_yolo(zip_ref: zipfile.ZipFile, tree: VirtualTree, detection,
                 result["truncated"] = True
                 break
             try:
-                raw = read_member_capped(zip_ref, member_path)
+                raw = reader.read(member_path)
             except ZipIndexError as exc:
                 if len(malformed) < MAX_ISSUE_SAMPLES:
                     malformed.append(f"{member_path}: {exc}")
@@ -411,13 +411,13 @@ def _analyze_yolo(zip_ref: zipfile.ZipFile, tree: VirtualTree, detection,
 # COCO / VOC（基本解析，未經真實資料驗證）
 # --------------------------------------------------------------------------- #
 
-def _analyze_coco(zip_ref: zipfile.ZipFile, tree: VirtualTree, detection,
+def _analyze_coco(reader, tree: VirtualTree, detection,
                   result: Dict[str, Any]) -> None:
     issues: List[Dict[str, Any]] = result["issues"]
     json_path = detection.extra.get("json_path")
 
     try:
-        raw = read_member_capped(zip_ref, json_path, JSON_MEMBER_CAP_BYTES)
+        raw = reader.read(json_path, JSON_MEMBER_CAP_BYTES)
     except ZipIndexError as exc:
         result["truncated"] = True
         issues.append(_issue("warning", "W_TRUNCATED", "COCO 標註檔過大或無法讀取，改以檔案清單估算", str(exc)))
@@ -481,7 +481,7 @@ def _analyze_coco(zip_ref: zipfile.ZipFile, tree: VirtualTree, detection,
     })
 
 
-def _analyze_voc(zip_ref: zipfile.ZipFile, tree: VirtualTree, detection,
+def _analyze_voc(reader, tree: VirtualTree, detection,
                  result: Dict[str, Any]) -> None:
     issues: List[Dict[str, Any]] = result["issues"]
     ann_dir = detection.extra.get("annotations_dir")
@@ -504,7 +504,7 @@ def _analyze_voc(zip_ref: zipfile.ZipFile, tree: VirtualTree, detection,
             result["truncated"] = True
             break
         try:
-            raw = read_member_capped(zip_ref, member_path)
+            raw = reader.read(member_path)
         except ZipIndexError:
             continue
 
@@ -585,22 +585,21 @@ def _analyze_voc(zip_ref: zipfile.ZipFile, tree: VirtualTree, detection,
 # 入口
 # --------------------------------------------------------------------------- #
 
-def analyze_dataset(zip_ref: zipfile.ZipFile, zip_name: str,
+def analyze_dataset(reader, zip_name: str,
                     zip_size_bytes: Optional[int] = None) -> Dict[str, Any]:
     """分析資料集 ZIP，回傳統計 dict。失敗時拋出 ZipIndexError。"""
     started = time.monotonic()
     result = _base_result(zip_name)
 
-    enforce_archive_limits(zip_ref, zip_size_bytes)
-    tree = build_virtual_tree(zip_ref)
+    tree = reader.build_tree()
     if not tree.member_by_path:
         raise ZipIndexError("ZIP 內沒有任何可分析的檔案")
 
-    detection = detect_format(zip_ref, tree)
+    detection = detect_format(reader, tree)
 
     result["format"] = detection.format
     result["root_prefix"] = detection.root_prefix + "/" if detection.root_prefix else ""
-    result["detected_candidates"] = detected_candidates(zip_ref, tree)
+    result["detected_candidates"] = detected_candidates(reader, tree)
     result["member_count"] = len(tree.member_by_path)
     result["uncompressed_size_mb"] = round(tree.total_uncompressed / 1024 / 1024, 2)
     result["zip_size_mb"] = round(zip_size_bytes / 1024 / 1024, 2) if zip_size_bytes else 0.0
@@ -608,13 +607,13 @@ def analyze_dataset(zip_ref: zipfile.ZipFile, zip_name: str,
     if detection.format == "yolo":
         result["analysis_depth"] = "deep"
         result["verified"] = True
-        _analyze_yolo(zip_ref, tree, detection, result)
+        _analyze_yolo(reader, tree, detection, result)
     elif detection.format == "coco":
         result["unverified_note"] = UNVERIFIED_NOTE
-        _analyze_coco(zip_ref, tree, detection, result)
+        _analyze_coco(reader, tree, detection, result)
     else:
         result["unverified_note"] = UNVERIFIED_NOTE
-        _analyze_voc(zip_ref, tree, detection, result)
+        _analyze_voc(reader, tree, detection, result)
 
     result["analysis_ms"] = int((time.monotonic() - started) * 1000)
     return result

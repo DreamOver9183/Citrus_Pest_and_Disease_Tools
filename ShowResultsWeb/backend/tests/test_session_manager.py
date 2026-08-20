@@ -91,3 +91,49 @@ def test_cleanup_legacy_runs_removes_only_matching_folders(tmp_path, monkeypatch
     assert not_legacy_dir.exists()
     assert temp_dir.exists()
     assert list(temp_dir.iterdir()) == []
+
+
+# --- LocalLibrary 來源不落地（最高價值測試）---------------------------------
+
+def test_local_library_sessions_are_not_persisted(tmp_path, monkeypatch):
+    """
+    LocalLibrary 掃描而來的 session 絕不能寫進 sessions.json。
+
+    這是「直到系統關閉」語意的實作機制：不寫入 → 重啟時自然不會被還原。
+    同時必須確認過濾是**選擇性**的——一般上傳的 session 仍要正常持久化，
+    否則就是把既有功能整組弄壞了。
+    """
+    target = tmp_path / "sessions.json"
+    monkeypatch.setattr(session_manager, "SESSIONS_FILE", str(target))
+
+    normal_weights = tmp_path / "uploaded.pt"
+    normal_weights.write_bytes(b"w")
+    local_weights = tmp_path / "LocalLibrary" / "scanned.pt"
+    local_weights.parent.mkdir()
+    local_weights.write_bytes(b"w")
+
+    session_manager.ACTIVE_SESSIONS["run_normal01"] = {
+        "session_id": "run_normal01",
+        "weights_path": str(normal_weights).replace("\\", "/"),
+        "dir_path": str(tmp_path).replace("\\", "/"),
+        "source_type": "single_weight",
+    }
+    session_manager.ACTIVE_SESSIONS["run_local001"] = {
+        "session_id": "run_local001",
+        "weights_path": str(local_weights).replace("\\", "/"),
+        "dir_path": str(local_weights.parent).replace("\\", "/"),
+        "source_type": "single_weight",
+        "source": "local_library",
+    }
+
+    session_manager.save_sessions_to_disk()
+
+    written = json.loads(target.read_text(encoding="utf-8"))
+    assert "run_normal01" in written, "一般 session 必須照常持久化"
+    assert "run_local001" not in written, "LocalLibrary session 不該被寫入"
+
+    # 重新載入後也不會冒出來
+    session_manager.ACTIVE_SESSIONS.clear()
+    session_manager.load_sessions_from_disk()
+    assert "run_normal01" in session_manager.ACTIVE_SESSIONS
+    assert "run_local001" not in session_manager.ACTIVE_SESSIONS

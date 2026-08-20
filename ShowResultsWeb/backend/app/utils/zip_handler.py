@@ -2,6 +2,8 @@ import os
 import zipfile
 import yaml
 
+from app.utils.dir_handler import index_yolo_runs_in_dir
+
 class ZipIndexError(Exception):
     """Raised when a ZIP archive cannot be extracted or indexed safely."""
 
@@ -44,64 +46,8 @@ def extract_and_index(zip_path: str, extract_to: str):
     except OSError as exc:
         raise ZipIndexError(f"解壓縮時發生系統錯誤: {exc}") from exc
         
-    found_runs = []
-    
-    # 遞迴遍歷解壓目錄，尋找所有包含 weights/best.pt 與 args.yaml 的 YOLO 訓練子目錄
-    for root, dirs, files in os.walk(extract_to):
-        if "weights" in dirs and "args.yaml" in files:
-            best_pt_path = os.path.join(root, "weights", "best.pt")
-            if os.path.exists(best_pt_path):
-                # 讀取 args.yaml 中的超參數
-                args_path = os.path.join(root, "args.yaml")
-                hyperparams = {}
-                try:
-                    with open(args_path, "r", encoding="utf-8") as f:
-                        hyperparams = yaml.safe_load(f) or {}
-                except Exception as e:
-                    print(f"[zip_handler] Error reading args.yaml at {args_path}: {e}")
-                
-                # 計算權重檔案大小 (MB)
-                weight_size_mb = round(os.path.getsize(best_pt_path) / (1024 * 1024), 2)
-                
-                # 取得相關超參數
-                epochs = hyperparams.get("epochs", "N/A")
-                optimizer = hyperparams.get("optimizer", "N/A")
-                model_name_cfg = hyperparams.get("model", "")
-                
-                # 讀取 results.csv 的最後一行取得最終驗證指標數據
-                results_csv = os.path.join(root, "results.csv")
-                metrics = {}
-                if os.path.exists(results_csv):
-                    try:
-                        with open(results_csv, "r", encoding="utf-8") as f:
-                            lines = [line.strip() for line in f.readlines() if line.strip()]
-                            if len(lines) > 1:
-                                headers = [h.strip() for h in lines[0].split(",")]
-                                last_values = [v.strip() for v in lines[-1].split(",")]
-                                for h, v in zip(headers, last_values):
-                                    cleaned_header = h.replace("metrics/", "").replace("(B)", "").strip()
-                                    metrics[cleaned_header] = v
-                    except Exception as e:
-                        print(f"[zip_handler] Error parsing results.csv at {results_csv}: {e}")
-                
-                # 取得 results.png 與 confusion_matrix.png 的實體路徑
-                results_png = os.path.join(root, "results.png").replace("\\", "/")
-                confusion_matrix = os.path.join(root, "confusion_matrix.png").replace("\\", "/")
-                
-                # 蒐集此模型實體規格
-                found_runs.append({
-                    "dir_path": root.replace("\\", "/"),
-                    "weights_path": best_pt_path.replace("\\", "/"),
-                    "weights_size_mb": weight_size_mb,
-                    "epochs": epochs,
-                    "optimizer": optimizer,
-                    "model_cfg": model_name_cfg,
-                    "metrics_summary": metrics,
-                    "results_png": results_png if os.path.exists(results_png) else None,
-                    "confusion_matrix": confusion_matrix if os.path.exists(confusion_matrix) else None
-                })
-                
-    return found_runs
+    # 走訪與索引邏輯與 LocalLibrary 掃描共用同一份定義，避免兩處各自漂移
+    return index_yolo_runs_in_dir(extract_to)
 
 def index_single_weight(file_path: str, dest_dir: str) -> dict:
     """

@@ -6,6 +6,7 @@ import pytest
 from app.services import dataset_analyzer as analyzer_mod
 from app.services.dataset_analyzer import analyze_dataset
 from app.utils import dataset_zip as dataset_zip_mod
+from app.utils.dataset_zip import ZipArchiveReader
 from app.utils.zip_handler import ZipIndexError
 
 YAML_8 = """\
@@ -42,7 +43,7 @@ def _yolo_entries(root="", yaml_text=YAML_8, splits=("train",)):
 
 def _run(entries):
     with _zip(entries) as zf:
-        return analyze_dataset(zf, "t.zip", 1234)
+        return analyze_dataset(ZipArchiveReader(zf, zip_size_bytes=1234), "t.zip", 1234)
 
 
 # --- 格式偵測 ---------------------------------------------------------------
@@ -397,7 +398,10 @@ def test_rejects_oversized_zip(monkeypatch):
     monkeypatch.setattr(dataset_zip_mod, "MAX_DATASET_ZIP_MB", 0)
     with _zip(_yolo_entries(root="ds")) as zf:
         with pytest.raises(ZipIndexError, match="過大"):
-            analyze_dataset(zf, "t.zip", zip_size_bytes=10 * 1024 * 1024)
+            analyze_dataset(
+                ZipArchiveReader(zf, zip_size_bytes=10 * 1024 * 1024),
+                "t.zip", zip_size_bytes=10 * 1024 * 1024,
+            )
 
 
 def test_rejects_oversized_uncompressed_total(monkeypatch):

@@ -10,7 +10,7 @@ from app.services.session_manager import (
     cleanup_temp_files,
     cleanup_legacy_runs,
 )
-from app.routers import sessions, devices, inference, metrics, chart_generator, datasets, exports
+from app.routers import sessions, devices, inference, metrics, chart_generator, datasets, exports, local_library
 from app.services.dataset_manager import load_datasets_from_disk
 from app.services.export_service import load_export_jobs_from_disk
 
@@ -41,6 +41,7 @@ app.include_router(metrics.router, prefix="/api")
 app.include_router(chart_generator.router, prefix="/api")
 app.include_router(datasets.router, prefix="/api")
 app.include_router(exports.router, prefix="/api")
+app.include_router(local_library.router, prefix="/api")
 
 # 掛載靜態推論/指標圖片暫存目錄
 app.mount("/static", StaticFiles(directory=str(TEMP_DIR)), name="static")

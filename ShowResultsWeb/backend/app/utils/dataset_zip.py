@@ -15,7 +15,7 @@ labels/*.txt、COCO json、VOC xml）。因此本模組只提供：
 import json
 import posixpath
 import zipfile
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from app.core.config import (
     MAX_DATASET_MEMBERS,
@@ -31,7 +31,7 @@ JSON_MEMBER_CAP_BYTES = 64 * 1024 * 1024       # COCO instances_*.json
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
 
 
-def _is_noise_member(name: str) -> bool:
+def is_noise_member(name: str) -> bool:
     """macOS 壓縮工具產生的資源分叉與系統檔，計入統計會灌水，一律忽略。"""
     parts = name.split("/")
     if any(p == "__MACOSX" for p in parts):
@@ -83,7 +83,9 @@ class VirtualTree:
 
     def __init__(self) -> None:
         self.dirs: Dict[str, Tuple[Set[str], Set[str]]] = {}
-        self.member_by_path: Dict[str, zipfile.ZipInfo] = {}
+        # 值可能是 zipfile.ZipInfo（ZIP 來源）或 dataset_dir._DirEntryStat（目錄來源），
+        # 消費端只讀 .file_size 這個共同屬性。
+        self.member_by_path: Dict[str, Any] = {}
         self.total_uncompressed: int = 0
 
     def _ensure_dir(self, dirpath: str) -> Tuple[Set[str], Set[str]]:
@@ -91,7 +93,7 @@ class VirtualTree:
             self.dirs[dirpath] = (set(), set())
         return self.dirs[dirpath]
 
-    def add_file(self, path: str, info: zipfile.ZipInfo) -> None:
+    def add_file(self, path: str, info: Any) -> None:
         dirpath, filename = posixpath.split(path)
         _, files = self._ensure_dir(dirpath)
         files.add(filename)
@@ -137,7 +139,7 @@ def build_virtual_tree(zip_ref: zipfile.ZipFile) -> VirtualTree:
         if info.is_dir():
             continue
         name = normalize_member_name(info.filename)
-        if not name or _is_noise_member(name):
+        if not name or is_noise_member(name):
             continue
         # 用固定的假 base 做穿越檢查：真正要擋的是 "../" 與絕對路徑
         if not is_member_within("/__dataset_root__", name):
@@ -179,10 +181,14 @@ def decode_text(data: bytes) -> str:
     return data.decode("utf-8-sig", errors="replace")
 
 
-def peek_json_object(zip_ref: zipfile.ZipFile, path: str) -> Optional[dict]:
-    """嘗試把成員解析為 JSON 物件；失敗回 None（供 COCO 偵測使用）。"""
+def peek_json_object(reader, path: str) -> Optional[dict]:
+    """嘗試把成員解析為 JSON 物件；失敗回 None（供 COCO 偵測使用）。
+
+    reader 是 ZipArchiveReader 或 DirArchiveReader——偵測與分析邏輯只需要
+    「讀取某路徑的位元組」這個能力，不在乎來源是壓縮檔還是真實目錄。
+    """
     try:
-        data = read_member_capped(zip_ref, path, JSON_MEMBER_CAP_BYTES)
+        data = reader.read(path, JSON_MEMBER_CAP_BYTES)
         parsed = json.loads(decode_text(data))
     except (ZipIndexError, ValueError):
         return None
@@ -208,3 +214,28 @@ class TextBudget:
             return False
         self.used += nbytes
         return True
+
+
+class ZipArchiveReader:
+    """
+    ZIP 來源的 reader adapter。
+
+    偵測（dataset_detector）與分析（dataset_analyzer）本來直接吃 zipfile.ZipFile，
+    但它們對 ZIP 其實沒有任何結構性依賴——只需要「建出目錄樹」與「讀取某路徑的
+    位元組」兩個能力。把這兩個能力收斂成 reader 介面後，同一套解析邏輯就能同時
+    服務壓縮檔與真實目錄（見 dataset_dir.DirArchiveReader），核心解析程式碼一行
+    都不用改。
+
+    本類別只是薄薄一層轉接，底下三個既有函式完全不動。
+    """
+
+    def __init__(self, zip_ref: zipfile.ZipFile, zip_size_bytes: Optional[int] = None):
+        self._zip_ref = zip_ref
+        self._zip_size_bytes = zip_size_bytes
+
+    def build_tree(self) -> VirtualTree:
+        enforce_archive_limits(self._zip_ref, self._zip_size_bytes)
+        return build_virtual_tree(self._zip_ref)
+
+    def read(self, path: str, cap: int = TEXT_MEMBER_CAP_BYTES) -> bytes:
+        return read_member_capped(self._zip_ref, path, cap)

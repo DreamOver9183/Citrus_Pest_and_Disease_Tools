@@ -16,6 +16,7 @@ app/routers/
   sessions.py                  session CRUD + 模型上傳（ZIP / 單一權重檔）
   datasets.py                  資料集上傳分析 / 列表 / 刪除
   exports.py                   模型格式轉換：能力查詢 / 送出 job / 輪詢 / 下載 / 刪除
+  local_library.py             本機資料夾掃描：路徑查詢 / 觸發掃描
   devices.py                   裝置列舉 / 切換
   inference.py                 執行推論（sync def，靠 FastAPI 執行緒池跑 PyTorch）
   metrics.py                   results.png 裁切、獨立圖表（confusion matrix 等）
@@ -32,11 +33,14 @@ app/services/
 app/utils/
   zip_handler.py                ZIP 安全解壓（路徑穿越防禦）+ YOLO run 索引
   dataset_zip.py               資料集 ZIP 唯讀層：虛擬目錄樹、大小上限、帶 cap 的成員讀取
+  dataset_dir.py               資料集「真實目錄」唯讀層（dataset_zip 的目錄對應版本）
+  dir_handler.py               目錄的 YOLO run 索引與就地權重索引（zip_handler 的目錄對應版本）
   image_cropper.py             results.png 網格像素裁切（2x5 grid）
   device_probe.py              torch/psutil 偵測 CPU/CUDA/MPS
 tests/                         pytest 單元測試（zip_handler / image_cropper / session_manager /
-                               dataset_analyzer / dataset_manager / export_service /
-                               export_routes / session_container_dirs，共 108 項）
+                               dataset_analyzer / dataset_manager / dataset_dir /
+                               dir_handler / export_service / export_routes /
+                               local_library_router / session_container_dirs，共 146 項）
 ```
 
 ### 關鍵設計決策（有意保留，非缺陷）
@@ -53,13 +57,14 @@ tests/                         pytest 單元測試（zip_handler / image_cropper
 main.jsx → App.jsx                     四分頁 SPA：模型與裝置 / 消融分析 / 即時診斷 / 資料集
                                        （模型匯出是 session 卡片上的動作，不另開分頁）
 context/
-  ExperimentContext.jsx                組合層 Provider：組合五個獨立 hook，對外仍暴露單一 useExperiment()
+  ExperimentContext.jsx                組合層 Provider：組合六個獨立 hook，對外仍暴露單一 useExperiment()
   hooks/
     useSessions.js                     Session 清單、CRUD、載入狀態
     useDeviceControl.js                裝置清單與目前選用裝置
     useLiveDemoState.js                LiveDemo 分頁的推論結果/已上傳檔案狀態（跨分頁切換不遺失）
     useDatasetState.js                 資料集分析結果與進行中的請求（跨分頁切換不遺失）
     useModelExport.js                  匯出 job 狀態與輪詢迴圈（跨分頁切換不遺失）
+    useLocalLibrary.js                 本機資料夾路徑與掃描結果（跨分頁切換不遺失）
 components/
   SystemSpecs.jsx                      上傳、裝置選擇、session 管理
   MetricDashboard.jsx                  消融看板協調器（狀態 + 資料抓取 + 版面）
@@ -78,6 +83,7 @@ components/
     ControlPanel.jsx                   右側上傳/設定控制欄
   system-specs/
     ExportPanel.jsx                    session 卡片上的模型格式轉換區塊
+    LocalLibraryPanel.jsx              本機資料夾路徑顯示與掃描觸發
     exportFormats.js                   格式標籤與靜態 Tailwind class 對照表
   DatasetAnalyzer.jsx                  資料集分析協調器
   dataset-analyzer/
@@ -101,7 +107,7 @@ components/
 
 ### Context 組合模式
 
-`ExperimentContext.jsx` 本身不持有業務狀態，而是組合 `useSessions`、`useDeviceControl`、`useLiveDemoState`、`useDatasetState`、`useModelExport` 五個獨立 hook 的回傳值，攤平後透過同一個 `useExperiment()` 對外暴露。這是刻意的 adapter 設計：既有元件（`SystemSpecs.jsx`、`LiveDemo.jsx`、`MetricDashboard.jsx`、`App.jsx`）呼叫 `useExperiment()` 的方式完全不需變動，同時五個 hook 各自獨立、可單獨測試或重用。`deleteSession` 是唯一的例外——組合層額外包了一層，在刪除後若已無任何 session，會呼叫 `setActiveTab('init')`（此邏輯原本就存在，只是搬到組合層，因為 `activeTab` 屬於頁面導覽狀態、不屬於任一個子 hook）。
+`ExperimentContext.jsx` 本身不持有業務狀態，而是組合 `useSessions`、`useDeviceControl`、`useLiveDemoState`、`useDatasetState`、`useModelExport`、`useLocalLibrary` 六個獨立 hook 的回傳值，攤平後透過同一個 `useExperiment()` 對外暴露。這是刻意的 adapter 設計：既有元件（`SystemSpecs.jsx`、`LiveDemo.jsx`、`MetricDashboard.jsx`、`App.jsx`）呼叫 `useExperiment()` 的方式完全不需變動，同時六個 hook 各自獨立、可單獨測試或重用。`deleteSession` 是唯一的例外——組合層額外包了一層，在刪除後若已無任何 session，會呼叫 `setActiveTab('init')`（此邏輯原本就存在，只是搬到組合層，因為 `activeTab` 屬於頁面導覽狀態、不屬於任一個子 hook）。
 
 ## 4. 資料集分析（第 4 分頁）
 
@@ -233,7 +239,68 @@ python -c "import app; from ultralytics.utils import AUTOINSTALL, ONLINE; print(
 
 應輸出 `False False`。
 
-## 6. Docker 環境的路徑對齊（重要）
+## 6. 本機資料夾掃描（LocalLibrary）
+
+使用者把訓練成果／資料集放進專案根目錄的 `LocalLibrary/`，按下「掃描本機資料夾」即可就地使用，**不需上傳、不複製任何位元組**。
+
+### 為什麼是固定目錄，不是「選擇資料夾」按鈕
+
+瀏覽器基於安全機制，永遠不會把使用者選取的資料夾轉成後端可用的絕對路徑字串（`showDirectoryPicker()` 只給檔案控制代碼與資料夾名稱）。固定目錄讓**路徑完全不需要經過瀏覽器**——掃描端點不接受任何請求參數，目標永遠是伺服器端設定好的 `LOCAL_LIBRARY_DIR`。附帶好處是 Docker 支援退化成一條與 `Datasets/` 對稱的 bind mount，不需要任何雙模式或能力分級邏輯。
+
+### reader 抽象層：ZIP 與目錄共用同一套解析邏輯
+
+原本的偵測（`dataset_detector`）與分析（`dataset_analyzer`）直接吃 `zipfile.ZipFile`，但稽核後發現它們對 ZIP **沒有任何結構性依賴**——所有 `zip_ref` 的使用都只是「讀取某路徑的位元組」的傳遞。因此把這個能力收斂成 reader 介面：
+
+| | ZIP 來源 | 目錄來源 |
+|---|---|---|
+| 建樹 | `ZipArchiveReader.build_tree()` | `DirArchiveReader.build_tree()` |
+| 讀取 | `.read(path, cap)` | `.read(path, cap)` |
+
+`_parse_data_yaml`、`_analyze_yolo`、`_analyze_coco`、`_analyze_voc` 內部所有 YOLO/COCO/VOC 解析、交叉驗證與 issue 邏輯**一行都沒改**，因為它們從頭到尾只操作 `bytes`/`str`/`VirtualTree`。`tests/test_dataset_dir.py` 有對等性測試釘住「同一份內容經兩種 reader 產出相同分析結果」。
+
+同理，`zip_handler.extract_and_index()` 原本內嵌的 `os.walk` 索引迴圈抽成 `dir_handler.index_yolo_runs_in_dir()`，兩條路徑現在共用同一份「什麼算是有效 YOLO run」的定義。
+
+### `_DirEntryStat` 必須有 `.file_size`（易踩的地雷）
+
+`dataset_analyzer` 的截斷保護是：
+
+```python
+info = tree.member_by_path.get(member_path)
+if info is not None and not budget.try_spend(info.file_size):
+    result["truncated"] = True
+```
+
+目錄來源若把 `member_by_path` 的值塞成 `None`，那個 `is not None` 前置條件會讓整個 `TextBudget` 保護**悄悄失效**——不報錯，只是永遠不截斷。因此目錄版本存的是 `_DirEntryStat(file_size=...)`（`zipfile.ZipInfo` 剛好也有同名屬性，兩種來源共用消費端）。`test_dir_source_still_enforces_text_budget` 專門釘住這件事。
+
+### 不落地：「直到系統關閉」的實作機制
+
+LocalLibrary 來源的 session/dataset 只存在於記憶體的 `ACTIVE_SESSIONS`/`ACTIVE_DATASETS`，**寫檔時被過濾掉**：
+
+- `save_sessions_to_disk()` 排除 `source == "local_library"`
+- `save_datasets_to_disk()` 排除有 `source_path` 的項目（ZIP 分析出的資料集永遠沒有這個欄位，因此不需要額外標記）
+
+重啟後自然不會被還原（從未寫入），使用者重新按一次掃描即可。過濾是**選擇性**的——一般上傳的 session/dataset 照常持久化，`test_local_library_sessions_are_not_persisted` 同時斷言這兩件事。
+
+所有讀取端（inference、metrics、export、chart_generator）完全不用修改，因為用的是同一個 dict。
+
+### 檔案安全
+
+系統對 `LocalLibrary/` **只讀不寫**：
+
+- `index_single_weight_in_place()` 不複製、不做 `.pth`→`.pt` 改名（那是使用者的檔案）
+- `delete_session()` 的目錄清理被 `if "extracted_runs" in dir_path` 擋住，LocalLibrary 路徑不會命中，只移除記憶體項目
+- 匯出功能安全：`export_service` 會先 `shutil.copy2` 到 `EXPORTS_DIR` 才轉檔，從不寫在原始檔旁邊
+- Docker 掛載為 `:ro`
+
+`test_delete_session_never_touches_paths_outside_extracted_runs` 涵蓋了「路徑完全不在 `extracted_runs` 之內」這個既有測試從未涵蓋的形狀。
+
+### 已知行為
+
+- **去重以絕對路徑為鍵**：同路徑重新訓練後，重新掃描不會更新既有註冊；需手動刪除後重掃或重啟。
+- **散落權重檔只掃頂層**：避免把 run 資料夾內的 `weights/last.pt` 誤判成獨立權重檔。
+- **`source_type` 用字面值 `"single_weight"`**（散落權重檔）：`ModelMetricCard.jsx` 用精確比對決定「Weight Only」徽章，沒有 fallback。
+
+## 7. Docker 環境的路徑對齊（重要）
 
 映像檔把專案結構**攤平**成 `/app/backend` 與 `/app/frontend`，並沒有主機端的 `ShowResultsWeb/` 這一層。而 `config.py` 的 `PROJECT_ROOT` 預設值是 `BACKEND_DIR.parent.parent`：
 
@@ -250,7 +317,7 @@ docker compose exec citrus-detection-app python -c "from app.core.config import 
 
 輸出應為 `/app/Datasets/samples`，且 `curl localhost:8000/samples/<某張實際存在的圖>` 應回 200。
 
-## 7. 已知限制
+## 8. 已知限制
 
 - E2E 測試（`e2e_tests/e2e_test.py`）需要真實模型/資料集檔案（`.gitignore` 排除、機器相依），未設定 `E2E_ASSETS_DIR` 時會優雅跳過；CI 僅涵蓋單元測試與前端編譯檢查，不含端到端流程。
 - 匯出功能只支援 YOLO；SSDLite（`.pth`）的卡片會停用並說明原因（依 `model_arch` 判斷，不能依副檔名——上傳時 `.pth` 會被改名成 `.pt`）。
@@ -259,4 +326,6 @@ docker compose exec citrus-detection-app python -c "from app.core.config import 
 - COCO 與 Pascal VOC 的資料集解析未經真實素材驗證（本專案只有 YOLO 資料集），僅依規格實作；UI 已明確標示。
 - 前端沒有測試框架（`package.json` 無 `test` script，CI 只做 build），前端的驗證僅有 `npm run build` 與人工走查。
 - 資料集分析是單一同步請求（實測 16,043 個成員約 1.1 秒）。日後若在前面加反向代理，預設約 60 秒的逾時可能截斷超大資料集；回應中的 `analysis_ms` 可用來觀測這個天花板。
+- LocalLibrary 掃描在 Docker 下完全依賴 `docker-compose.yml` 的 `./LocalLibrary:/app/LocalLibrary:ro` 掛載。若忘記這條掛載，容器內的目錄是空的，掃描會回報「找不到可辨識內容」而**不是錯誤**——無法從容器內部可靠判斷一個目錄是不是真的 bind mount。
+- LocalLibrary 目錄走訪用 `follow_symlinks=False` 避免遞迴逃出根目錄，但樹內的**檔案**符號連結仍會被 `open()` 跟隨讀取。這在「單一本機操作者放自己的檔案」的前提下是可接受的；若部署模型改成多使用者或對外服務，需重新評估。
 - YOLO 推論已用真實權重驗證過（實測 `POST /api/inference` 回 `status: success`，CPU）；**SSDLite 推論路徑仍未用真實 `.pth` 驗證**。完整端到端請跑 `e2e_tests/e2e_test.py`（設好 `E2E_ASSETS_DIR`）。

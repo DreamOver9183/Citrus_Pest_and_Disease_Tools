@@ -49,7 +49,13 @@ def save_datasets_to_disk() -> None:
     try:
         os.makedirs(os.path.dirname(DATASETS_FILE), exist_ok=True)
         with DATASETS_LOCK:
-            snapshot = dict(ACTIVE_DATASETS)
+            # 與 session 同理：有 source_path 就代表來自 LocalLibrary 掃描，不落地。
+            # ZIP 分析出的資料集永遠沒有 source_path（它們沒有對應的實體目錄），
+            # 因此這個條件本身就足以區分兩種來源，不需要額外的標記欄位。
+            snapshot = {
+                k: v for k, v in ACTIVE_DATASETS.items()
+                if not v.get("source_path")
+            }
         with open(DATASETS_FILE, "w", encoding="utf-8") as handle:
             json.dump(snapshot, handle, ensure_ascii=False, indent=2)
     except Exception as exc:

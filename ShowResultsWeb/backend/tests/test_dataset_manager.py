@@ -104,3 +104,32 @@ def test_assert_within_containment():
     base = os.path.dirname(os.path.abspath(__file__))
     assert dataset_manager._assert_within(base, os.path.join(base, "sub", "file.txt"))
     assert not dataset_manager._assert_within(base, os.path.join(base, "..", "escape.txt"))
+
+
+# --- LocalLibrary 來源不落地（最高價值測試）---------------------------------
+
+def test_local_library_datasets_are_not_persisted(tmp_path, monkeypatch):
+    """
+    有 source_path 的資料集（來自 LocalLibrary 掃描）絕不能寫進 datasets.json，
+    而一般 ZIP 分析結果必須照常持久化。
+    """
+    target = tmp_path / "datasets.json"
+    monkeypatch.setattr(dataset_manager, "DATASETS_FILE", str(target))
+
+    normal = _stats("ds_normal")
+    scanned = _stats("ds_local")
+    scanned["source_path"] = str(tmp_path / "LocalLibrary" / "mydata").replace("\\", "/")
+
+    dataset_manager.ACTIVE_DATASETS["ds_normal"] = normal
+    dataset_manager.ACTIVE_DATASETS["ds_local"] = scanned
+
+    dataset_manager.save_datasets_to_disk()
+
+    written = json.loads(target.read_text(encoding="utf-8"))
+    assert "ds_normal" in written, "一般資料集必須照常持久化"
+    assert "ds_local" not in written, "LocalLibrary 資料集不該被寫入"
+
+    dataset_manager.ACTIVE_DATASETS.clear()
+    dataset_manager.load_datasets_from_disk()
+    assert "ds_normal" in dataset_manager.ACTIVE_DATASETS
+    assert "ds_local" not in dataset_manager.ACTIVE_DATASETS

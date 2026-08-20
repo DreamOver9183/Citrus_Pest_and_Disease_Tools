@@ -71,13 +71,13 @@ def _find_split_dirs(tree: VirtualTree, root: str) -> List[str]:
     return sorted(found)
 
 
-def _looks_like_coco(zip_ref: zipfile.ZipFile, tree: VirtualTree, dirpath: str) -> Optional[str]:
+def _looks_like_coco(reader, tree: VirtualTree, dirpath: str) -> Optional[str]:
     """回傳第一個看起來像 COCO 標註的 json 路徑。"""
     for filename in sorted(tree.files_in(dirpath)):
         if not filename.lower().endswith(".json"):
             continue
         path = tree.join(dirpath, filename)
-        parsed = peek_json_object(zip_ref, path)
+        parsed = peek_json_object(reader, path)
         if parsed is None:
             continue
         if isinstance(parsed.get("images"), list) and isinstance(parsed.get("annotations"), list):
@@ -99,7 +99,7 @@ def _voc_xml_dir(tree: VirtualTree, dirpath: str) -> Optional[str]:
     return None
 
 
-def detect_format(zip_ref: zipfile.ZipFile, tree: VirtualTree) -> Detection:
+def detect_format(reader, tree: VirtualTree) -> Detection:
     """
     偵測資料集格式，回傳最高分的判定。
 
@@ -120,7 +120,7 @@ def detect_format(zip_ref: zipfile.ZipFile, tree: VirtualTree) -> Detection:
             ))
 
         # --- COCO ---
-        coco_path = _looks_like_coco(zip_ref, tree, dirpath)
+        coco_path = _looks_like_coco(reader, tree, dirpath)
         if coco_path:
             candidates.append(Detection(
                 "coco", dirpath, SCORE_COCO,
@@ -166,7 +166,7 @@ def detect_format(zip_ref: zipfile.ZipFile, tree: VirtualTree) -> Detection:
     return candidates[0]
 
 
-def detected_candidates(zip_ref: zipfile.ZipFile, tree: VirtualTree) -> List[str]:
+def detected_candidates(reader, tree: VirtualTree) -> List[str]:
     """
     回傳所有被偵測到的格式（去重，依分數排序）。
 
@@ -179,7 +179,7 @@ def detected_candidates(zip_ref: zipfile.ZipFile, tree: VirtualTree) -> List[str
             seen["yolo"] = max(seen.get("yolo", 0), SCORE_YOLO_WITH_YAML)
         elif _find_split_dirs(tree, dirpath):
             seen["yolo"] = max(seen.get("yolo", 0), SCORE_YOLO_NO_YAML)
-        if _looks_like_coco(zip_ref, tree, dirpath):
+        if _looks_like_coco(reader, tree, dirpath):
             seen["coco"] = max(seen.get("coco", 0), SCORE_COCO)
         if _voc_xml_dir(tree, dirpath):
             seen["voc"] = max(seen.get("voc", 0), SCORE_VOC_STRUCTURED)
