@@ -132,3 +132,84 @@ def test_in_place_returns_same_keys_as_copying_variant(tmp_path):
     in_place = index_single_weight_in_place(str(src))
 
     assert set(copied.keys()) == set(in_place.keys())
+
+
+# --- peek_yolo_runs_in_zip: ZIP 內的 run 索引（不解壓縮） ----------------------
+
+def _run_zip(path, run_names, root="detect"):
+    import zipfile
+    with zipfile.ZipFile(path, "w") as zf:
+        for name in run_names:
+            # prefix 為空代表 run 就在 ZIP 根層，成員名不能帶前導斜線
+            prefix = "/".join(p for p in (root, name) if p)
+            base = f"{prefix}/" if prefix else ""
+            zf.writestr(f"{base}args.yaml", "epochs: 160\noptimizer: MuSGD\nmodel: yolo26n.pt\n")
+            zf.writestr(f"{base}weights/best.pt", b"w" * 2048)
+            zf.writestr(f"{base}results.csv",
+                        "epoch,metrics/mAP50(B)\n1,0.11\n160,0.798\n")
+    return path
+
+
+def test_peek_zip_finds_every_run_without_extracting(tmp_path):
+    """
+    ZIP 內的每一個 run 都要被找到，且不得在磁碟上留下任何解壓內容。
+
+    這是使用者回報缺陷的直接回歸測試：把訓練成果 ZIP 放進 LocalLibrary 後，
+    整包內容完全不可見，因為 .zip 不是權重副檔名、os.walk 也不會走進壓縮檔。
+    """
+    from app.utils.zip_handler import peek_yolo_runs_in_zip
+
+    zip_path = _run_zip(tmp_path / "v5.zip", ["run_a", "run_b"])
+    before = sorted(p.name for p in tmp_path.iterdir())
+
+    runs = peek_yolo_runs_in_zip(str(zip_path))
+
+    assert {r["name"] for r in runs} == {"run_a", "run_b"}
+    assert sorted(p.name for p in tmp_path.iterdir()) == before, "不得解壓任何內容"
+
+
+def test_peek_zip_reads_hyperparams_and_metrics(tmp_path):
+    """清單上顯示的 epochs / mAP 必須來自 ZIP 內真實的 args.yaml 與 results.csv。"""
+    from app.utils.zip_handler import peek_yolo_runs_in_zip
+
+    zip_path = _run_zip(tmp_path / "v8.zip", ["run_a"])
+    run = peek_yolo_runs_in_zip(str(zip_path))[0]
+
+    assert run["epochs"] == 160
+    assert run["optimizer"] == "MuSGD"
+    assert run["metrics_summary"]["mAP50"] == "0.798", "要取最後一列，不是第一列"
+    assert run["inner_dir"] == "detect/run_a"
+
+
+def test_peek_zip_ignores_run_without_args_yaml(tmp_path):
+    """判定條件與目錄版本一致：缺 args.yaml 就不算有效的 run。"""
+    import zipfile
+    from app.utils.zip_handler import peek_yolo_runs_in_zip
+
+    zip_path = tmp_path / "partial.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("detect/no_args/weights/best.pt", b"w")
+
+    assert peek_yolo_runs_in_zip(str(zip_path)) == []
+
+
+def test_peek_zip_handles_run_at_archive_root(tmp_path):
+    """ZIP 根層就是 run 本身（沒有 detect/ 包裝層）也要能處理。"""
+    from app.utils.zip_handler import peek_yolo_runs_in_zip
+
+    zip_path = _run_zip(tmp_path / "flat.zip", [""], root="")
+    runs = peek_yolo_runs_in_zip(str(zip_path))
+
+    assert len(runs) == 1
+    assert runs[0]["inner_dir"] == ""
+    assert runs[0]["name"] == "flat"
+
+
+def test_peek_zip_returns_empty_for_corrupt_archive(tmp_path):
+    """損毀的 ZIP 回空清單而非拋例外——一個壞檔不該讓整次掃描失敗。"""
+    from app.utils.zip_handler import peek_yolo_runs_in_zip
+
+    bad = tmp_path / "bad.zip"
+    bad.write_bytes(b"not a zip at all")
+
+    assert peek_yolo_runs_in_zip(str(bad)) == []

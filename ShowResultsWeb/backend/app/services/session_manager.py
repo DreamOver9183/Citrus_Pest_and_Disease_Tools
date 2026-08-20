@@ -3,7 +3,7 @@ import json
 import shutil
 import re
 import threading
-from app.core.config import EXTRACTED_RUNS_DIR, TEMP_DIR, SAMPLES_DIR, ensure_dirs
+from app.core.config import EXTRACTED_RUNS_DIR, TEMP_DIR, SAMPLES_DIR, LOCAL_LIBRARY_EXTRACT_DIR, ensure_dirs
 from app.services.model_service import model_manager
 
 # 全域 Session 追蹤字典。跨執行緒池讀寫（upload/delete/inference 皆可能併發執行），
@@ -76,6 +76,16 @@ def cleanup_legacy_runs():
                     shutil.rmtree(path)
                 except Exception:
                     pass
+    # LocalLibrary 的 ZIP 解壓內容與其 session 同生命週期——session 本來就不落地，
+    # 留著解壓內容只會佔磁碟且成為沒有任何 session 指向的孤兒。
+    if os.path.exists(LOCAL_LIBRARY_EXTRACT_DIR):
+        try:
+            shutil.rmtree(LOCAL_LIBRARY_EXTRACT_DIR)
+            print(f"[SessionManager] Cleared local library extracts: {LOCAL_LIBRARY_EXTRACT_DIR}")
+        except Exception as e:
+            print(f"[SessionManager] Error clearing {LOCAL_LIBRARY_EXTRACT_DIR}: {e}")
+    os.makedirs(LOCAL_LIBRARY_EXTRACT_DIR, exist_ok=True)
+
     # 僅清理 temp_output，保留 weight/reports/images 以防止使用者進度遺失
     if os.path.exists(TEMP_DIR):
         try:
@@ -114,8 +124,12 @@ def delete_session(session_id: str):
                     # 這份白名單是「容器目錄」清單——底下的內容屬於個別 session，但目錄本身絕不能被刪。
                     # exports 是後加的：匯出產物放在 extracted_runs/exports/<job_id>/，若有任何
                     # session 的 dir_path 落在其下，上面的字串切割會算出 extracted_runs/exports
-                    # 並 rmtree 整個匯出根目錄。datasets 也曾踩過同一個坑。
-                    if folder_to_delete and folder_to_delete not in ["temp_output", "temp", "reports", "images", "weight", "exports", "datasets"]:
+                    # 並 rmtree 整個匯出根目錄。datasets 與 local_library 也是同一個坑：
+                    # LocalLibrary 的 ZIP 解壓在 extracted_runs/local_library/<zip>/，刪掉其中
+                    # 一個 session 會連帶清空所有其他 ZIP 來源的模型。
+                    if folder_to_delete and folder_to_delete not in [
+                        "temp_output", "temp", "reports", "images", "weight", "exports", "datasets", "local_library"
+                    ]:
                         # 檢查是否有其他 active sessions 也在使用 target_to_del 下的任何路徑
                         other_sessions_using = False
                         for other_sid, other_sdata in ACTIVE_SESSIONS.items():

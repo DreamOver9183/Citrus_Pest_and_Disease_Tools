@@ -28,6 +28,10 @@ def _resolve_paths():
     # 使用者手動放置模型/資料集的固定目錄，供「本機資料庫掃描」功能就地讀取。
     # 與 Datasets/ 同層級。本系統只會建立這個目錄並讀取其內容，絕不寫入或刪除裡面的檔案。
     LOCAL_LIBRARY_DIR = Path(os.environ.get("LOCAL_LIBRARY_DIR", PROJECT_ROOT / "LocalLibrary")).resolve()
+    # LocalLibrary 內的 ZIP 訓練成果需要解壓才能載入（權重無法從壓縮檔內直接餵給
+    # Ultralytics）。解壓落點刻意放在受管的 extracted_runs/ 底下而非使用者的資料夾，
+    # 維持「絕不寫入 LOCAL_LIBRARY_DIR」的保證；每次啟動會整個清空。
+    LOCAL_LIBRARY_EXTRACT_DIR = EXTRACTED_RUNS_DIR / "local_library"
 
     return {
         "PROJECT_ROOT": PROJECT_ROOT,
@@ -39,6 +43,7 @@ def _resolve_paths():
         "IMAGES_DIR": IMAGES_DIR,
         "EXPORTS_DIR": EXPORTS_DIR,
         "LOCAL_LIBRARY_DIR": LOCAL_LIBRARY_DIR,
+        "LOCAL_LIBRARY_EXTRACT_DIR": LOCAL_LIBRARY_EXTRACT_DIR,
     }
 
 
@@ -53,6 +58,7 @@ SAMPLES_DIR = _PATHS["SAMPLES_DIR"]
 IMAGES_DIR = _PATHS["IMAGES_DIR"]
 EXPORTS_DIR = _PATHS["EXPORTS_DIR"]
 LOCAL_LIBRARY_DIR = _PATHS["LOCAL_LIBRARY_DIR"]
+LOCAL_LIBRARY_EXTRACT_DIR = _PATHS["LOCAL_LIBRARY_EXTRACT_DIR"]
 
 # 上傳檔案暫存目錄（絕對路徑，不受啟動時 cwd 影響）
 UPLOAD_TEMP_DIR = Path(os.environ.get("UPLOAD_TEMP_DIR", BACKEND_DIR / "temp")).resolve()
@@ -98,7 +104,8 @@ CORS_ALLOWED_ORIGINS = [
 
 def ensure_dirs():
     """Create standard directories if missing (idempotent)."""
-    for p in [EXTRACTED_RUNS_DIR, TEMP_DIR, REPORTS_DIR, SAMPLES_DIR, IMAGES_DIR, UPLOAD_TEMP_DIR, EXPORTS_DIR, LOCAL_LIBRARY_DIR]:
+    for p in [EXTRACTED_RUNS_DIR, TEMP_DIR, REPORTS_DIR, SAMPLES_DIR, IMAGES_DIR, UPLOAD_TEMP_DIR, EXPORTS_DIR,
+              LOCAL_LIBRARY_DIR, LOCAL_LIBRARY_EXTRACT_DIR]:
         try:
             p.mkdir(parents=True, exist_ok=True)
         except Exception:
@@ -115,6 +122,7 @@ __all__ = [
     "IMAGES_DIR",
     "EXPORTS_DIR",
     "LOCAL_LIBRARY_DIR",
+    "LOCAL_LIBRARY_EXTRACT_DIR",
     "UPLOAD_TEMP_DIR",
     "MAX_SESSIONS",
     "MAX_DATASETS",

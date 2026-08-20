@@ -16,7 +16,7 @@ app/routers/
   sessions.py                  session CRUD + 模型上傳（ZIP / 單一權重檔）
   datasets.py                  資料集上傳分析 / 列表 / 刪除
   exports.py                   模型格式轉換：能力查詢 / 送出 job / 輪詢 / 下載 / 刪除
-  local_library.py             本機資料夾掃描：路徑查詢 / 觸發掃描
+  local_library.py             本機資料夾：路徑查詢 / 掃描（唯讀）/ 載入勾選項目
   devices.py                   裝置列舉 / 切換
   inference.py                 執行推論（sync def，靠 FastAPI 執行緒池跑 PyTorch）
   metrics.py                   results.png 裁切、獨立圖表（confusion matrix 等）
@@ -28,6 +28,7 @@ app/services/
   dataset_manager.py           ACTIVE_DATASETS + datasets.json 持久化（僅存統計，不存資料集內容）
   export_capabilities.py       匯出能力探測：OS 閘 + 相依探測（find_spec，不 import）
   export_service.py            匯出 job 表、daemon worker、產物與 manifest 生命週期
+  library_scanner.py           LocalLibrary 的探索（唯讀列出候選項）與註冊（只處理勾選項）
   model_service.py             ModelManager 單例：同時只保留一個模型在記憶體
   device_service.py            裝置探測結果快取（30s TTL）
 app/utils/
@@ -40,7 +41,7 @@ app/utils/
 tests/                         pytest 單元測試（zip_handler / image_cropper / session_manager /
                                dataset_analyzer / dataset_manager / dataset_dir /
                                dir_handler / export_service / export_routes /
-                               local_library_router / session_container_dirs，共 146 項）
+                               local_library_router / session_container_dirs，共 160 項）
 ```
 
 ### 關鍵設計決策（有意保留，非缺陷）
@@ -64,7 +65,7 @@ context/
     useLiveDemoState.js                LiveDemo 分頁的推論結果/已上傳檔案狀態（跨分頁切換不遺失）
     useDatasetState.js                 資料集分析結果與進行中的請求（跨分頁切換不遺失）
     useModelExport.js                  匯出 job 狀態與輪詢迴圈（跨分頁切換不遺失）
-    useLocalLibrary.js                 本機資料夾路徑與掃描結果（跨分頁切換不遺失）
+    useLocalLibrary.js                 本機資料夾路徑、候選清單與勾選狀態（跨分頁切換不遺失）
 components/
   SystemSpecs.jsx                      上傳、裝置選擇、session 管理
   MetricDashboard.jsx                  消融看板協調器（狀態 + 資料抓取 + 版面）
@@ -83,7 +84,7 @@ components/
     ControlPanel.jsx                   右側上傳/設定控制欄
   system-specs/
     ExportPanel.jsx                    session 卡片上的模型格式轉換區塊
-    LocalLibraryPanel.jsx              本機資料夾路徑顯示與掃描觸發
+    LocalLibraryPanel.jsx              本機資料夾路徑、候選勾選清單與載入按鈕
     exportFormats.js                   格式標籤與靜態 Tailwind class 對照表
   DatasetAnalyzer.jsx                  資料集分析協調器
   dataset-analyzer/
@@ -241,7 +242,33 @@ python -c "import app; from ultralytics.utils import AUTOINSTALL, ONLINE; print(
 
 ## 6. 本機資料夾掃描（LocalLibrary）
 
-使用者把訓練成果／資料集放進專案根目錄的 `LocalLibrary/`，按下「掃描本機資料夾」即可就地使用，**不需上傳、不複製任何位元組**。
+使用者把訓練成果／資料集放進專案根目錄的 `LocalLibrary/`，按下「掃描本機資料夾」看到找到的內容，勾選要載入的項目即可就地使用，**不需上傳**。
+
+### 掃描與載入是兩個階段
+
+`POST /local-library/scan` 純唯讀，只回報找到什麼；`POST /local-library/register` 才依 `candidate_id` 註冊使用者實際勾選的項目。
+
+第一版是「掃描即註冊」，有兩個實務上的硬傷：`MAX_SESSIONS` 只有 3，資料夾裡若有 6 個模型，使用者拿到的是**掃描順序的前 3 個**而不是想要的那 3 個；而資料集只對整棵樹跑一次分析、取分數最高的根目錄，並存的第二個資料集會被無聲吞掉。分成兩階段之後，「找得到」與「要不要用」是兩件獨立的事，數量上限只在載入時才生效。
+
+`tests/test_local_library_router.py::test_scan_lists_candidates_without_registering_anything` 釘住掃描的唯讀性——這是整組測試裡最該守住的一條。
+
+### 四種來源形態
+
+| 形態 | 探索方式 | 載入方式 |
+|---|---|---|
+| YOLO run 資料夾 | `index_yolo_runs_in_dir()` 遞迴走訪 | 就地引用，不複製 |
+| 散落權重檔（僅頂層） | 副檔名比對 | 就地引用，不複製 |
+| 訓練成果 ZIP | `peek_yolo_runs_in_zip()` 只讀中央目錄 | 解壓到 `LOCAL_LIBRARY_EXTRACT_DIR` |
+| 資料集（資料夾或 ZIP） | `analyze_dataset()` 零解壓分析 | 直接沿用探索階段算好的統計 |
+
+**ZIP 支援是後補的缺陷修正**：`.zip` 不在權重副檔名清單裡，而 `os.walk` 不會走進壓縮檔，因此第一版把訓練成果 ZIP 放進資料夾後**整包內容完全不可見、也不報錯**。實測使用者放了 `v5.zip` 與 `v8.zip`，看到的卻是先前遺留的解壓資料夾，兩者恰好同名，讓這個缺陷更難察覺。
+
+ZIP 是唯一需要寫入磁碟的形態——權重無法從壓縮檔內直接餵給 Ultralytics。落點在受管的 `extracted_runs/local_library/`（由 ZIP 絕對路徑推導，因此同一個 ZIP 只會解壓一份），啟動時整個清空，所以「絕不寫入 `LOCAL_LIBRARY_DIR`」的保證仍然成立。
+
+### `local_library` 必須列入 `delete_session` 的容器白名單
+
+這是 §5 記錄過的同一個坑的第三次現形。ZIP 來源 session 的 `dir_path` 形如 `extracted_runs/local_library/<zip>/detect/<run>`，`delete_session()` 的字串切割會算出 `extracted_runs/local_library` 並 `rmtree` 整個根目錄——刪掉一個 ZIP 來源的模型，會連帶清空**其他所有 ZIP 來源模型**的權重。`test_delete_session_never_removes_container_dir[local_library]` 已加入既有的參數化清單；移除白名單項目後該測試確實會紅。
+
 
 ### 為什麼是固定目錄，不是「選擇資料夾」按鈕
 
@@ -296,8 +323,9 @@ LocalLibrary 來源的 session/dataset 只存在於記憶體的 `ACTIVE_SESSIONS
 
 ### 已知行為
 
-- **去重以絕對路徑為鍵**：同路徑重新訓練後，重新掃描不會更新既有註冊；需手動刪除後重掃或重啟。
+- **去重以絕對路徑為鍵**：同路徑重新訓練後，重新載入不會更新既有註冊；需手動刪除後重載或重啟。
 - **散落權重檔只掃頂層**：避免把 run 資料夾內的 `weights/last.pt` 誤判成獨立權重檔。
+- **資料集逐個頂層項目探測**，而非對整棵樹跑一次分析——後者只會回報分數最高的那一個，多個並存的資料集會被吞掉。根目錄本身最後才探測一次，涵蓋「data.yaml 與 train/ 直接放在頂層」的情形，並以偵測到的根路徑去重。
 - **`source_type` 用字面值 `"single_weight"`**（散落權重檔）：`ModelMetricCard.jsx` 用精確比對決定「Weight Only」徽章，沒有 fallback。
 
 ## 7. Docker 環境的路徑對齊（重要）

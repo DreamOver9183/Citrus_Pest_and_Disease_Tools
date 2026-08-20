@@ -49,6 +49,74 @@ def extract_and_index(zip_path: str, extract_to: str):
     # 走訪與索引邏輯與 LocalLibrary 掃描共用同一份定義，避免兩處各自漂移
     return index_yolo_runs_in_dir(extract_to)
 
+def peek_yolo_runs_in_zip(zip_path: str) -> list:
+    """
+    列出 ZIP 內的 YOLO 訓練 run，**完全不解壓縮**。
+
+    只讀中央目錄的檔名清單，加上每個 run 的 args.yaml / results.csv 兩個小文字檔。
+    用於 LocalLibrary 掃描的「探索」階段：使用者需要在決定要不要載入之前，先看到
+    ZIP 裡到底有哪些 run 以及各自的 epochs/指標。
+
+    判定條件與目錄版本一致（weights/best.pt + args.yaml 同層），因此同一個訓練成果
+    無論以資料夾或 ZIP 的形式放進 LocalLibrary，看到的清單都相同。
+
+    回傳的 dict 帶 inner_dir（run 在 ZIP 內的相對路徑），供之後解壓後定位同一個 run。
+    """
+    runs = []
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            names = set(zip_ref.namelist())
+
+            for name in sorted(names):
+                if not name.endswith("weights/best.pt"):
+                    continue
+                # "<run>/weights/best.pt" -> "<run>"；根層的 "weights/best.pt" -> ""
+                run_dir = name[: -len("weights/best.pt")].rstrip("/")
+                args_name = f"{run_dir}/args.yaml" if run_dir else "args.yaml"
+                if args_name not in names:
+                    continue
+
+                hyperparams = {}
+                try:
+                    # 上限保護：args.yaml 正常只有數 KB，惡意壓縮檔不該能撐爆記憶體
+                    with zip_ref.open(args_name) as f:
+                        hyperparams = yaml.safe_load(f.read(1024 * 1024)) or {}
+                except Exception as e:
+                    print(f"[zip_handler] Error reading {args_name} in {zip_path}: {e}")
+
+                metrics = {}
+                results_name = f"{run_dir}/results.csv" if run_dir else "results.csv"
+                if results_name in names:
+                    try:
+                        with zip_ref.open(results_name) as f:
+                            text = f.read(4 * 1024 * 1024).decode("utf-8", errors="replace")
+                        lines = [line.strip() for line in text.splitlines() if line.strip()]
+                        if len(lines) > 1:
+                            headers = [h.strip() for h in lines[0].split(",")]
+                            last_values = [v.strip() for v in lines[-1].split(",")]
+                            for h, v in zip(headers, last_values):
+                                metrics[h.replace("metrics/", "").replace("(B)", "").strip()] = v
+                    except Exception as e:
+                        print(f"[zip_handler] Error parsing {results_name} in {zip_path}: {e}")
+
+                runs.append({
+                    "inner_dir": run_dir,
+                    "name": os.path.basename(run_dir) or os.path.splitext(os.path.basename(zip_path))[0],
+                    "weights_size_mb": round(zip_ref.getinfo(name).file_size / (1024 * 1024), 2),
+                    "epochs": hyperparams.get("epochs", "N/A"),
+                    "optimizer": hyperparams.get("optimizer", "N/A"),
+                    "model_cfg": hyperparams.get("model", ""),
+                    "metrics_summary": metrics,
+                })
+    except zipfile.BadZipFile:
+        return []
+    except OSError as e:
+        print(f"[zip_handler] Error opening {zip_path}: {e}")
+        return []
+
+    return runs
+
+
 def index_single_weight(file_path: str, dest_dir: str) -> dict:
     """
     處理單一權重檔案的複製與 Session 資訊生成。

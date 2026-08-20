@@ -21,10 +21,11 @@ export const ExperimentProvider = ({ children }) => {
   const exportState = useModelExport();
   const localLibraryState = useLocalLibrary();
 
-  // 掃描回應同時帶回 sessions 與 datasets 兩份快照，分屬不同 hook——
+  // 載入回應同時帶回 sessions 與 datasets 兩份快照，分屬不同 hook——
   // 與 deleteSession 同樣的理由，跨 hook 的協調邏輯放在 Provider 層。
-  const scanLocalLibrary = async () => {
-    const result = await localLibraryState.scanLocalLibrary();
+  // （掃描本身不需要這層包裝：它不註冊任何東西，兩份快照都不會變動。）
+  const registerLocalLibrarySelection = async () => {
+    const result = await localLibraryState.registerSelected();
     if (result.success) {
       sessionsState.setSessions(result.sessions);
       datasetState.setDatasets(result.datasets);
@@ -50,7 +51,7 @@ export const ExperimentProvider = ({ children }) => {
       ...exportState,
       ...localLibraryState,
       deleteSession,
-      scanLocalLibrary,
+      registerLocalLibrarySelection,
       activeTab,
       setActiveTab
     }}>

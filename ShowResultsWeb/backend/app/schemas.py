@@ -259,12 +259,37 @@ class LocalLibraryInfoResponse(BaseModel):
     exists: bool
 
 
+class LocalLibraryCandidate(BaseModel):
+    """掃描到的一個可用項目。使用者勾選後才會真正註冊。"""
+    candidate_id: str
+    kind: str                       # "model" | "dataset"
+    source_kind: str                # run_dir | weight_file | zip_run | dataset_dir | dataset_zip
+    name: str
+    rel_path: str
+    size_mb: Optional[float] = None
+    detail: Optional[str] = None
+    already_registered: bool = False
+
+
 class LocalLibraryScanResponse(BaseModel):
+    """掃描結果。純唯讀——這個回應不代表任何東西已被註冊。"""
+    status: str
+    candidates: List[LocalLibraryCandidate] = []
+    total_models: int = 0
+    total_datasets: int = 0
+    message: Optional[str] = None
+
+
+class LocalLibraryRegisterRequest(BaseModel):
+    candidate_ids: List[str] = []
+
+
+class LocalLibraryRegisterResponse(BaseModel):
     status: str
     registered_sessions: List[str] = []
     registered_datasets: List[str] = []
-    skipped_sessions: int = 0
-    skipped_datasets: int = 0
+    skipped: int = 0
+    failed: List[str] = []
     message: Optional[str] = None
     sessions: Dict[str, SessionOut] = {}
     datasets: Dict[str, DatasetStatsOut] = {}

@@ -5,7 +5,9 @@ session_manager.delete_session() 用字串切割從 dir_path 反推要刪除的�
 白名單擋下容器目錄。若某個容器名不在白名單裡，刪一個 session 會 rmtree 掉整個
 容器根目錄，連帶清空其他功能的所有資料。
 
-datasets/ 曾踩過這個坑（見 dataset_manager.py 的模組註解），exports/ 是同一類風險。
+datasets/ 曾踩過這個坑（見 dataset_manager.py 的模組註解），exports/ 與 local_library/
+是同一類風險——後者底下每個子目錄是一個 ZIP 的解壓內容，刪掉一個 session 若連帶
+rmtree 整個 local_library/，其他 ZIP 來源模型的權重會一起消失。
 """
 import os
 
@@ -44,7 +46,10 @@ def _make_session(tmp_path, container: str, monkeypatch):
     return container_dir, sentinel, leaf
 
 
-@pytest.mark.parametrize("container", ["exports", "datasets", "weight", "images", "reports"])
+@pytest.mark.parametrize(
+    "container",
+    ["exports", "datasets", "weight", "images", "reports", "local_library"],
+)
 def test_delete_session_never_removes_container_dir(tmp_path, monkeypatch, container):
     container_dir, sentinel, leaf = _make_session(tmp_path, container, monkeypatch)
 

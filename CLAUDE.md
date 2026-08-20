@@ -62,7 +62,9 @@ E2E_ASSETS_DIR=<path> python e2e_tests/e2e_test.py
 
 9. **改動需要「讀取某個位元組來源」的邏輯（ZIP 解析、資料夾解析）時，優先看能不能用既有的 reader 抽象**（`ZipArchiveReader`/`DirArchiveReader`，見 architecture.md §6）。這兩者只包一層 `build_tree()`/`read(path, cap)`，上層的 YOLO/COCO/VOC 解析邏輯完全不用關心來源是 ZIP 還是真實目錄。目錄端的 `_DirEntryStat` **必須有真實的 `.file_size` 屬性，絕不能用 `None` 佔位**——`dataset_analyzer` 的截斷保護是 `if info is not None and not budget.try_spend(info.file_size)`，塞 `None` 會讓保護悄悄失效而不報錯。
 
-10. **Pydantic `response_model_exclude_unset=True` 會靜默裁掉沒賦值的欄位**，前端拿到的會是 `undefined` 而非欄位不存在的 KeyError。新增回應欄位時記得在建構回應物件當下就賦值（哪怕是 `None`），不要依賴 Pydantic 預設值。
+10. **新增任何會把 session 的 `dir_path` 指到 `extracted_runs/<新容器>/` 底下的功能時，那個容器名一定要加進 `delete_session()` 的白名單**（[session_manager.py](ShowResultsWeb/backend/app/services/session_manager.py) 內的 `["temp_output", "temp", "reports", …]`）。該函式用字串切割反推刪除目標，容器名不在白名單就會 `rmtree` 整個容器根目錄，刪一個 session 連帶清空其他所有同類資料。`datasets`/`exports`/`local_library` 都各自踩過一次，`tests/test_session_container_dirs.py` 有參數化測試，新容器記得補一行。
+
+11. **Pydantic `response_model_exclude_unset=True` 會靜默裁掉沒賦值的欄位**，前端拿到的會是 `undefined` 而非欄位不存在的 KeyError。新增回應欄位時記得在建構回應物件當下就賦值（哪怕是 `None`），不要依賴 Pydantic 預設值。
 
 ## 依賴版本鎖定，改動前三思
 
@@ -77,6 +79,7 @@ E2E_ASSETS_DIR=<path> python e2e_tests/e2e_test.py
 - 匯出功能的 job **不支援取消**——`model.export()` 執行中無法從 Python 中止，給一個按了沒用的取消鍵比不給更糟。
 - 匯出只出 FP32，`quantize` 白名單刻意只放行 `32`/`None`——ONNX 的 FP16 轉換失敗在 ultralytics 內是被捕捉並警告的，等於會靜默交出標著 FP16 的 FP32 檔，貿然開放 FP16 選項會是使用者看不見的錯誤。
 - LocalLibrary 掃描結果不落地（重啟後消失）——這是設計目標本身（「直到系統關閉、刪除暫存」），不是忘記持久化。
+- LocalLibrary 的掃描**不會自動載入**任何東西，一定要使用者勾選後按載入——`MAX_SESSIONS` 只有 3，自動載入等於由掃描順序替使用者決定拿到哪幾個模型。
 
 完整清單見 [docs/architecture.md 已知限制](docs/architecture.md#8-已知限制)。
 

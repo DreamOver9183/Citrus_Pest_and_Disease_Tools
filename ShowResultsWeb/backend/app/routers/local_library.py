@@ -2,196 +2,51 @@
 本機資料夾掃描。
 
 使用者用作業系統的檔案總管把訓練成果／資料集放進 LOCAL_LIBRARY_DIR，再按下
-掃描按鈕。後端就地讀取，不複製任何位元組，也不需要任何上傳流量。
+掃描按鈕檢視找到的內容，勾選要載入的項目。
 
 為什麼是「固定目錄」而不是讓使用者輸入路徑：瀏覽器基於安全機制，永遠不會把
 使用者選取的資料夾轉成可用的絕對路徑字串（showDirectoryPicker() 只給檔案控制代碼
 與資料夾名稱）。固定目錄讓路徑完全不需要經過瀏覽器，同時也讓 Docker 支援退化成
 一條普通的 bind mount。
 
-**本模組只讀不寫**：註冊的 session/dataset 都是就地引用；刪除它們也只會移除
-記憶體中的紀錄（session_manager.delete_session 的目錄清理被 "extracted_runs"
-子字串條件擋住，LocalLibrary 路徑不會命中）。
+**掃描與註冊是分開的兩個端點**：掃描純唯讀，註冊只處理使用者實際勾選的項目。
+理由與實作細節見 `app/services/library_scanner.py` 的模組說明。
+
+**本模組不寫入 LOCAL_LIBRARY_DIR**：資料夾與散落權重檔都是就地引用；唯一會落地的
+是 ZIP 的解壓內容，而落點在受管的 extracted_runs/local_library/ 底下。
 """
-import os
 import threading
-import uuid
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Union
 
 from fastapi import APIRouter
 
 from app.core.config import LOCAL_LIBRARY_DIR, MAX_SESSIONS
-from app.schemas import ErrorResponse, LocalLibraryInfoResponse, LocalLibraryScanResponse
-from app.services.dataset_analyzer import analyze_dataset
-from app.services.dataset_manager import ACTIVE_DATASETS, DATASETS_LOCK, register_dataset
-from app.services.session_manager import ACTIVE_SESSIONS, SESSIONS_LOCK, save_sessions_to_disk
-from app.utils.dataset_dir import DirArchiveReader
-from app.utils.dir_handler import index_single_weight_in_place, index_yolo_runs_in_dir
-from app.utils.zip_handler import ZipIndexError
+from app.schemas import (
+    ErrorResponse,
+    LocalLibraryInfoResponse,
+    LocalLibraryRegisterRequest,
+    LocalLibraryRegisterResponse,
+    LocalLibraryScanResponse,
+)
+from app.services import library_scanner
+from app.services.dataset_manager import ACTIVE_DATASETS, DATASETS_LOCK
+from app.services.session_manager import ACTIVE_SESSIONS, SESSIONS_LOCK
 
 router = APIRouter()
 
-# 一次只允許一個掃描：走訪大型資料夾是重度 I/O，與 datasets.py 的分析同理。
+# 一次只允許一個掃描：走訪大型資料夾並分析其中的資料集是重度 I/O，
+# 與 datasets.py 的分析同理。
 _SCAN_SEMAPHORE = threading.BoundedSemaphore(1)
 
-# 刻意與 sessions.py 各自維護一份。本專案沒有 router 互相 import 的先例，
-# 小幅重複比引入新的耦合方向風險更低。
-SUPPORTED_WEIGHT_EXTENSIONS = {".pt", ".pth", ".onnx", ".tflite", ".engine", ".torchscript"}
-FORMAT_LABELS = {
-    ".pt": "PyTorch",
-    ".pth": "SSDLite-MobileNetV3 (PyTorch)",
-    ".onnx": "ONNX",
-    ".tflite": "TFLite",
-    ".engine": "TensorRT",
-    ".torchscript": "TorchScript",
-}
 
-
-def _resolved(path: str) -> str:
-    """去重鍵：絕對路徑 + 大小寫正規化（Windows 上 C:/A 與 c:/a 是同一個檔案）。"""
-    return os.path.normcase(os.path.abspath(path))
-
-
-def _detect_arch(filename: str) -> str:
-    """依原始檔名判斷架構，與 sessions.py 的判定規則一致。"""
-    if filename.lower().endswith(".pth"):
-        return "ssdlite_mobilenet_v3_small" if "small" in filename.lower() else "ssdlite_mobilenet_v3_large"
-    return "yolo"
-
-
-def _existing_weight_keys() -> set:
-    """呼叫端必須已持有 SESSIONS_LOCK。"""
-    return {
-        _resolved(s["weights_path"])
-        for s in ACTIVE_SESSIONS.values()
-        if s.get("weights_path")
-    }
-
-
-def _scan_models(root: str) -> Tuple[List[str], int, bool]:
-    """
-    註冊 root 底下的 YOLO run 資料夾與頂層散落權重檔。
-
-    回傳 (新註冊的 session_id 清單, 略過數, 是否因達上限而中止)。
-    """
-    registered: List[str] = []
-    skipped = 0
-    capped = False
-
-    found_runs = index_yolo_runs_in_dir(root)
-
+def _snapshots():
     with SESSIONS_LOCK:
-        existing = _existing_weight_keys()
-
-        # 1) 訓練 run 資料夾
-        for run in found_runs:
-            key = _resolved(run["weights_path"])
-            if key in existing:
-                skipped += 1
-                continue
-            if len(ACTIVE_SESSIONS) >= MAX_SESSIONS:
-                capped = True
-                break
-
-            session_id = f"run_{uuid.uuid4().hex[:8]}"
-            folder_name = os.path.basename(run["dir_path"]) or "run"
-            ACTIVE_SESSIONS[session_id] = {
-                "session_id": session_id,
-                "zip_name": folder_name,
-                # 任何非 "single_weight" 的值都會讓前端顯示 "Runs Log" 徽章，這正是我們要的
-                "source_type": "local_library_run",
-                "format_label": "本機資料夾",
-                "model_arch": "yolo",
-                "custom_name": f"{folder_name}（本機）",
-                "metrics_csv_path": None,
-                "source": "local_library",
-                **run,
-            }
-            existing.add(key)
-            registered.append(session_id)
-
-        # 2) 頂層散落權重檔（不遞迴——避免把 run 資料夾內的 weights/last.pt
-        #    誤判成另一個獨立權重檔）
-        if not capped:
-            try:
-                top_level = sorted(
-                    entry for entry in os.listdir(root)
-                    if os.path.isfile(os.path.join(root, entry))
-                )
-            except OSError:
-                top_level = []
-
-            for filename in top_level:
-                ext = os.path.splitext(filename)[1].lower()
-                if ext not in SUPPORTED_WEIGHT_EXTENSIONS:
-                    continue
-
-                file_path = os.path.join(root, filename)
-                key = _resolved(file_path)
-                if key in existing:
-                    skipped += 1
-                    continue
-                if len(ACTIVE_SESSIONS) >= MAX_SESSIONS:
-                    capped = True
-                    break
-
-                info = index_single_weight_in_place(file_path)
-                session_id = f"run_{uuid.uuid4().hex[:8]}"
-                format_label = FORMAT_LABELS.get(ext, ext.upper())
-                ACTIVE_SESSIONS[session_id] = {
-                    "session_id": session_id,
-                    "zip_name": filename,
-                    # 必須是這個字面值：ModelMetricCard 用精確比對決定 "Weight Only" 徽章
-                    "source_type": "single_weight",
-                    "format_label": format_label,
-                    "model_arch": _detect_arch(filename),
-                    "custom_name": f"{os.path.splitext(filename)[0]}（本機）",
-                    "metrics_csv_path": None,
-                    "source": "local_library",
-                    **info,
-                }
-                existing.add(key)
-                registered.append(session_id)
-
-    if registered:
-        save_sessions_to_disk()
-    return registered, skipped, capped
-
-
-def _scan_dataset(root: str) -> Tuple[Optional[str], int]:
-    """
-    對整棵樹跑一次資料集偵測與分析。
-
-    回傳 (新註冊的 dataset_id 或 None, 略過數)。找不到可辨識的資料集不算錯誤——
-    這是混合內容的掃描，資料夾裡可能就是只有模型。
-    """
-    try:
-        stats = analyze_dataset(DirArchiveReader(root), zip_name=os.path.basename(root), zip_size_bytes=None)
-    except ZipIndexError:
-        return None, 0
-    except Exception as exc:  # noqa: BLE001 - 資料集偵測失敗不得影響已註冊的模型
-        print(f"[LocalLibrary] Dataset analysis failed: {exc}")
-        return None, 0
-
-    detected_root = os.path.join(root, stats["root_prefix"].rstrip("/")) if stats["root_prefix"] else root
-    stats["source_path"] = _resolved(detected_root)
-    stats["zip_name"] = os.path.basename(detected_root.rstrip(os.sep)) or os.path.basename(root)
-
+        sessions = dict(ACTIVE_SESSIONS)
     with DATASETS_LOCK:
-        duplicate = any(
-            _resolved(d["source_path"]) == stats["source_path"]
-            for d in ACTIVE_DATASETS.values()
-            if d.get("source_path")
-        )
-    if duplicate:
-        return None, 1
-
-    register_dataset(stats)
-    return stats["dataset_id"], 0
+        datasets = dict(ACTIVE_DATASETS)
+    return sessions, datasets
 
 
-# 路由順序無關緊要（兩條路徑都是字面值，沒有 path parameter），
-# 但仍維持「唯讀查詢在前、動作在後」的可讀性慣例。
 @router.get("/local-library", response_model=LocalLibraryInfoResponse, response_model_exclude_unset=True)
 def get_local_library_info():
     """回傳資料夾的絕對路徑供 UI 顯示。純唯讀，不會註冊任何東西。"""
@@ -209,10 +64,12 @@ def get_local_library_info():
 )
 def scan_local_library():
     """
-    掃描本機資料夾並註冊找到的模型與資料集。
+    列出資料夾內所有可辨識的模型與資料集。
 
     不接受任何請求參數——掃描目標永遠是伺服器端設定好的 LOCAL_LIBRARY_DIR，
     路徑完全不經過瀏覽器。
+
+    **這個端點不註冊任何東西**，只回報找到什麼。實際載入請呼叫 /register。
     """
     if not LOCAL_LIBRARY_DIR.exists():
         return {
@@ -224,40 +81,63 @@ def scan_local_library():
         return {"status": "error", "message": "目前已有掃描正在進行中，請稍候再試"}
 
     try:
-        root = str(LOCAL_LIBRARY_DIR)
-
-        # 模型與資料集彼此獨立：任一邊失敗都不該連累另一邊
-        registered_sessions, skipped_sessions, capped = _scan_models(root)
-        dataset_id, skipped_datasets = _scan_dataset(root)
-        registered_datasets = [dataset_id] if dataset_id else []
-
-        parts = []
-        if registered_sessions:
-            parts.append(f"新增 {len(registered_sessions)} 個模型")
-        if registered_datasets:
-            parts.append(f"新增 {len(registered_datasets)} 個資料集")
-        skipped_total = skipped_sessions + skipped_datasets
-        if skipped_total:
-            parts.append(f"{skipped_total} 筆已存在略過")
-        if capped:
-            parts.append(f"已達模型數量上限（{MAX_SESSIONS}）")
-        if not parts:
-            parts.append("未找到可辨識的模型或資料集")
-
-        with SESSIONS_LOCK:
-            sessions_snapshot = dict(ACTIVE_SESSIONS)
-        with DATASETS_LOCK:
-            datasets_snapshot = dict(ACTIVE_DATASETS)
-
-        return {
-            "status": "success",
-            "registered_sessions": registered_sessions,
-            "registered_datasets": registered_datasets,
-            "skipped_sessions": skipped_sessions,
-            "skipped_datasets": skipped_datasets,
-            "message": "；".join(parts),
-            "sessions": sessions_snapshot,
-            "datasets": datasets_snapshot,
-        }
+        candidates = library_scanner.discover(str(LOCAL_LIBRARY_DIR))
     finally:
         _SCAN_SEMAPHORE.release()
+
+    models = [c for c in candidates if c["kind"] == "model"]
+    datasets = [c for c in candidates if c["kind"] == "dataset"]
+
+    if candidates:
+        message = f"已掃描出 {len(models)} 個權重、{len(datasets)} 個資料集"
+    else:
+        message = "未找到可辨識的模型或資料集。請確認資料夾內含 YOLO 訓練成果（weights/best.pt + args.yaml）、權重檔或資料集。"
+
+    return {
+        "status": "success",
+        "candidates": [library_scanner.public_view(c) for c in candidates],
+        "total_models": len(models),
+        "total_datasets": len(datasets),
+        "message": message,
+    }
+
+
+@router.post(
+    "/local-library/register",
+    response_model=Union[LocalLibraryRegisterResponse, ErrorResponse],
+    response_model_exclude_unset=True,
+)
+def register_local_library(payload: LocalLibraryRegisterRequest):
+    """載入使用者勾選的項目。candidate_id 來自上一次 /scan 的結果。"""
+    if not payload.candidate_ids:
+        return {"status": "error", "message": "請至少勾選一個項目"}
+
+    result = library_scanner.register(payload.candidate_ids)
+
+    parts = []
+    if result["registered_sessions"]:
+        parts.append(f"已載入 {len(result['registered_sessions'])} 個權重")
+    if result["registered_datasets"]:
+        parts.append(f"已載入 {len(result['registered_datasets'])} 個資料集")
+    if result["skipped"]:
+        parts.append(f"{result['skipped']} 筆已存在略過")
+    if result["capped"]:
+        parts.append(f"已達模型數量上限（{MAX_SESSIONS}），請先刪除既有模型再載入其餘項目")
+    if result["failed"]:
+        parts.append(f"{len(result['failed'])} 筆載入失敗：{'、'.join(result['failed'])}")
+    if result["unknown"]:
+        parts.append(f"{len(result['unknown'])} 筆項目已失效，請重新掃描")
+    if not parts:
+        parts.append("沒有任何項目被載入")
+
+    sessions, datasets = _snapshots()
+    return {
+        "status": "success",
+        "registered_sessions": result["registered_sessions"],
+        "registered_datasets": result["registered_datasets"],
+        "skipped": result["skipped"],
+        "failed": result["failed"],
+        "message": "；".join(parts),
+        "sessions": sessions,
+        "datasets": datasets,
+    }
