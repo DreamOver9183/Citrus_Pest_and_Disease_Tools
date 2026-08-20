@@ -90,6 +90,14 @@ pytest -v
 
 前端目前以 `npm run build` 作為編譯檢查（尚無自動化測試框架），CI 已涵蓋兩者。
 
+端到端測試需要後端已在執行，並以 `LocalLibrary/` 內的真實檔案驅動（涵蓋掃描、勾選載入、指標、推論、資料集分析、ONNX/TFLite 匯出與刪除安全性）：
+
+```bash
+python e2e_tests/e2e_local_library.py
+```
+
+`LocalLibrary/` 是空的時會優雅跳過。設 `E2E_SKIP_TFLITE=1` 可略過耗時約 110 秒的 TFLite 匯出。
+
 ## 已知限制
 
 - **TFLite（LiteRT）匯出僅支援 Docker / Linux 環境**：本機 Windows 開發模式下會顯示為不可用並說明原因。

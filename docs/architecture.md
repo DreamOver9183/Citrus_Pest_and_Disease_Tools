@@ -347,7 +347,8 @@ docker compose exec citrus-detection-app python -c "from app.core.config import 
 
 ## 8. 已知限制
 
-- E2E 測試（`e2e_tests/e2e_test.py`）需要真實模型/資料集檔案（`.gitignore` 排除、機器相依），未設定 `E2E_ASSETS_DIR` 時會優雅跳過；CI 僅涵蓋單元測試與前端編譯檢查，不含端到端流程。
+- E2E 測試有兩支，都需要後端已在執行、且在缺素材時優雅跳過；CI 僅涵蓋單元測試與前端編譯檢查，不含端到端流程。
+  `e2e_tests/e2e_local_library.py` 是主力，用 `LocalLibrary/` 內的真實檔案跑完十個階段（掃描唯讀性、勾選載入、使用者檔案指紋、指標圖、推論對照真實標註、資料集分析對照 ZIP 實際成員數、ONNX/TFLite 匯出、刪除安全性）；`e2e_tests/e2e_test.py` 是早期的上傳流程煙霧測試，需要 `E2E_ASSETS_DIR` 指向特定佈局的素材夾。
 - 匯出功能只支援 YOLO；SSDLite（`.pth`）的卡片會停用並說明原因（依 `model_arch` 判斷，不能依副檔名——上傳時 `.pth` 會被改名成 `.pt`）。
 - 匯出目前只出 FP32。`quantize` 參數已從 API 打通並用伺服器端白名單驗證，但白名單暫時只含 `32`/`None`：
   ONNX 的 FP16 轉換失敗在 ultralytics 內是**被捕捉並警告**的，等於會靜默交出一個標著 FP16 的 FP32 檔。

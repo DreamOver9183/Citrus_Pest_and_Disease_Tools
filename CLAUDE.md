@@ -32,8 +32,9 @@ cd ShowResultsWeb/frontend && npm run dev     # 代理 /api、/static、/samples
 # Docker（唯一能跑 TFLite 匯出的環境；Windows 開發模式下 TFLite 會顯示不可用）
 docker compose up --build
 
-# E2E（需要真實模型/資料集，未設定會優雅跳過）
-E2E_ASSETS_DIR=<path> python e2e_tests/e2e_test.py
+# E2E（需要後端已在執行；兩支都會在缺少素材時優雅跳過）
+python e2e_tests/e2e_local_library.py       # 主力：用 LocalLibrary/ 內的真實檔案跑完整流程
+E2E_ASSETS_DIR=<path> python e2e_tests/e2e_test.py   # 早期的上傳流程煙霧測試
 ```
 
 沒有 lint/format 工具鏈（無 ruff/eslint 設定檔），改動風格比照鄰近程式碼即可。CI（`.github/workflows/ci.yml`）只跑 `pytest` 與 `npm run build` 兩項工作，兩者本機都須先過再提交。
