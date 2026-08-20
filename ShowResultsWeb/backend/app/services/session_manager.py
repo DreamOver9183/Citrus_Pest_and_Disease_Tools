@@ -128,7 +128,8 @@ def delete_session(session_id: str):
                     # LocalLibrary 的 ZIP 解壓在 extracted_runs/local_library/<zip>/，刪掉其中
                     # 一個 session 會連帶清空所有其他 ZIP 來源的模型。
                     if folder_to_delete and folder_to_delete not in [
-                        "temp_output", "temp", "reports", "images", "weight", "exports", "datasets", "local_library"
+                        "temp_output", "temp", "reports", "images", "weight", "exports", "datasets",
+                        "local_library", "evaluations",
                     ]:
                         # 檢查是否有其他 active sessions 也在使用 target_to_del 下的任何路徑
                         other_sessions_using = False

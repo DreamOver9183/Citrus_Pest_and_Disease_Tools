@@ -32,6 +32,9 @@ def _resolve_paths():
     # Ultralytics）。解壓落點刻意放在受管的 extracted_runs/ 底下而非使用者的資料夾，
     # 維持「絕不寫入 LOCAL_LIBRARY_DIR」的保證；每次啟動會整個清空。
     LOCAL_LIBRARY_EXTRACT_DIR = EXTRACTED_RUNS_DIR / "local_library"
+    # 驗證評估的工作目錄：每個 job 一個子資料夾，內含 ultralytics 產出的圖表，
+    # 以及（ZIP 來源時）該 split 的選擇性解壓內容。
+    EVAL_DIR = EXTRACTED_RUNS_DIR / "evaluations"
 
     return {
         "PROJECT_ROOT": PROJECT_ROOT,
@@ -44,6 +47,7 @@ def _resolve_paths():
         "EXPORTS_DIR": EXPORTS_DIR,
         "LOCAL_LIBRARY_DIR": LOCAL_LIBRARY_DIR,
         "LOCAL_LIBRARY_EXTRACT_DIR": LOCAL_LIBRARY_EXTRACT_DIR,
+        "EVAL_DIR": EVAL_DIR,
     }
 
 
@@ -59,6 +63,7 @@ IMAGES_DIR = _PATHS["IMAGES_DIR"]
 EXPORTS_DIR = _PATHS["EXPORTS_DIR"]
 LOCAL_LIBRARY_DIR = _PATHS["LOCAL_LIBRARY_DIR"]
 LOCAL_LIBRARY_EXTRACT_DIR = _PATHS["LOCAL_LIBRARY_EXTRACT_DIR"]
+EVAL_DIR = _PATHS["EVAL_DIR"]
 
 # 上傳檔案暫存目錄（絕對路徑，不受啟動時 cwd 影響）
 UPLOAD_TEMP_DIR = Path(os.environ.get("UPLOAD_TEMP_DIR", BACKEND_DIR / "temp")).resolve()
@@ -93,6 +98,16 @@ MAX_QUEUED_EXPORTS = int(os.environ.get("MAX_QUEUED_EXPORTS", "3"))
 # 匯出產物保留時數，啟動與每次提交時掃除逾期者
 EXPORT_JOB_TTL_HOURS = int(os.environ.get("EXPORT_JOB_TTL_HOURS", "24"))
 
+# --- 驗證評估 ---
+# 保留的評估 job 數量上限（超過時淘汰最舊的「已完成」job，永不淘汰執行中的）
+MAX_EVAL_JOBS = int(os.environ.get("MAX_EVAL_JOBS", "20"))
+# 等待佇列長度上限。與匯出同理：一次只跑一個評估，有界佇列讓過載降級成誠實的「佇列已滿」。
+MAX_QUEUED_EVALS = int(os.environ.get("MAX_QUEUED_EVALS", "3"))
+# 評估產物（圖表與解壓的 split）保留時數
+EVAL_JOB_TTL_HOURS = int(os.environ.get("EVAL_JOB_TTL_HOURS", "24"))
+# 單次評估最多解壓的影像數，擋下誤選超大 split 的情況
+MAX_EVAL_IMAGES = int(os.environ.get("MAX_EVAL_IMAGES", "20000"))
+
 # CORS 允許的前端來源（逗號分隔）。Docker 單容器部署下前後端同源，此設定主要用於本機開發
 # （Vite dev server 預設在 5173 port）。
 CORS_ALLOWED_ORIGINS = [
@@ -105,7 +120,7 @@ CORS_ALLOWED_ORIGINS = [
 def ensure_dirs():
     """Create standard directories if missing (idempotent)."""
     for p in [EXTRACTED_RUNS_DIR, TEMP_DIR, REPORTS_DIR, SAMPLES_DIR, IMAGES_DIR, UPLOAD_TEMP_DIR, EXPORTS_DIR,
-              LOCAL_LIBRARY_DIR, LOCAL_LIBRARY_EXTRACT_DIR]:
+              LOCAL_LIBRARY_DIR, LOCAL_LIBRARY_EXTRACT_DIR, EVAL_DIR]:
         try:
             p.mkdir(parents=True, exist_ok=True)
         except Exception:
@@ -123,6 +138,7 @@ __all__ = [
     "EXPORTS_DIR",
     "LOCAL_LIBRARY_DIR",
     "LOCAL_LIBRARY_EXTRACT_DIR",
+    "EVAL_DIR",
     "UPLOAD_TEMP_DIR",
     "MAX_SESSIONS",
     "MAX_DATASETS",
@@ -135,6 +151,10 @@ __all__ = [
     "MAX_EXPORT_JOBS",
     "MAX_QUEUED_EXPORTS",
     "EXPORT_JOB_TTL_HOURS",
+    "MAX_EVAL_JOBS",
+    "MAX_QUEUED_EVALS",
+    "EVAL_JOB_TTL_HOURS",
+    "MAX_EVAL_IMAGES",
     "CORS_ALLOWED_ORIGINS",
     "ensure_dirs",
 ]

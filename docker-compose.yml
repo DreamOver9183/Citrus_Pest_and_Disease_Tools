@@ -17,6 +17,9 @@ services:
       - ./LocalLibrary:/app/LocalLibrary:ro
       # Mount extracted_runs as read-write to save metrics & prediction logs
       - ./ShowResultsWeb/backend/extracted_runs:/app/backend/extracted_runs
+      # 成果報告是要交付出去的檔案，必須落在主機端才不會隨容器重建消失。
+      # （評估結果本身在 extracted_runs/evaluations/ 底下，已由上一條掛載涵蓋。）
+      - ./reports:/app/reports
     environment:
       - PYTHONUNBUFFERED=1
       # 映像檔把專案攤平成 /app/backend（沒有 ShowResultsWeb 這層），

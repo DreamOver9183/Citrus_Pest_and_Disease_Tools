@@ -429,6 +429,11 @@ def register(candidate_ids: List[str]) -> Dict[str, Any]:
             stats = dict(candidate["_stats"])
             stats["source_path"] = candidate["_dataset_key"]
             stats["zip_name"] = candidate["name"]
+            # source_path 是「資料夾路徑 + 內層前綴」黏成的去重鍵，且經過 normcase，
+            # 對 ZIP 來源（…/foo.zip/inner）根本不是可開啟的路徑。額外記下容器本身與
+            # 內層前綴，讓後續要真正讀取檔案的功能（驗證評估）不必反解字串。
+            stats["source_container"] = candidate["_container"]
+            stats["source_inner_prefix"] = (stats.get("root_prefix") or "").strip("/")
             register_dataset(stats)
             registered_datasets.append(stats["dataset_id"])
         except Exception as exc:  # noqa: BLE001

@@ -50,5 +50,6 @@ LocalLibrary/
 Thumbs.db
 desktop.ini
 
-# Generated reports (keep source markdown, ignore generated HTML if desired)
-# reports/*.html
+# Generated evaluation reports — self-contained HTML with base64-embedded charts
+# (~1 MB each), produced per run and specific to the user's own models/datasets.
+reports/

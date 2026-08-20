@@ -12,6 +12,8 @@
 - **資料集分析**：上傳 YOLO / COCO / Pascal VOC 格式的資料集 ZIP，自動辨識格式並統計影像數、標註數、類別分佈與健檢結果——**全程不解壓縮**，數 GB 的資料集也能在一秒內完成分析。
 - **模型格式匯出**：一鍵將 `best.pt` 轉換為 ONNX，或於 Docker 環境轉換為 TFLite（LiteRT），背景 job 執行並提供下載。
 - **本機資料夾掃描**：把訓練成果或資料集（**資料夾或 ZIP 皆可**）放進專案根目錄的 `LocalLibrary/`，按一下「掃描」即可列出找到的所有權重與資料集，勾選要載入的項目直接使用——**不需上傳**，系統對該資料夾只讀不寫。
+- **驗證評估**：讓載入的模型**實際跑過**資料集的 test / valid split，重新計算 mAP、逐類別 AP 與召回率、混淆矩陣與 PR 曲線——不是沿用訓練時記錄的舊數值。多個模型跑同一份測試集即可做公平的消融比較，並附「AP × 標註框尺寸」散點圖用於分析小物件表現。
+- **成果報告**：把一或多份評估打包成單一自足的 HTML（圖表全部內嵌，離線可讀），瀏覽器列印即可另存 PDF。
 
 ## 技術棧
 
@@ -63,16 +65,17 @@ npm run dev
 
 ```
 ShowResultsWeb/backend/          FastAPI 後端
-  app/routers/                   API 路由（sessions / datasets / exports / local_library / devices / inference / metrics）
-  app/services/                  業務邏輯（模型管理、資料集分析、匯出 job、裝置探測）
+  app/routers/                   API 路由（sessions / datasets / exports / local_library / evaluations / reports / devices / inference / metrics）
+  app/services/                  業務邏輯（模型管理、資料集分析、匯出/評估 job、報告產生、裝置探測）
   app/utils/                     ZIP 與目錄的唯讀讀取層、YOLO run 索引、圖片裁切
   tests/                         pytest 單元測試
 ShowResultsWeb/frontend/         Vite + React 前端
   src/components/                各分頁元件（依 dataset-analyzer / live-demo / metric-dashboard / system-specs 拆分子模組）
   src/context/                   全域狀態（Context + 拆分後的獨立 hook）
 LocalLibrary/                    本機資料夾掃描的目標（使用者自行放入，不進版控）
+reports/                         驗證評估產生的成果報告（HTML，不進版控）
 docs/architecture.md             系統架構文件（模組職責、關鍵設計決策、已知限制）
-e2e_tests/                       端到端煙霧測試（需設定 E2E_ASSETS_DIR 指向本機資料才會執行）
+e2e_tests/                       端到端測試（以 LocalLibrary/ 的真實檔案驅動）
 .github/workflows/ci.yml         CI（後端 pytest + 前端建置）
 ```
 
@@ -104,5 +107,8 @@ python e2e_tests/e2e_local_library.py
 - **COCO / Pascal VOC 資料集解析未經真實素材驗證**：本專案實際使用的資料集皆為 YOLO 格式，這兩種格式僅依規格實作。
 - **SSDLite（`.pth`）模型不支援格式匯出**：僅 YOLO 架構可轉換為 ONNX / TFLite。
 - **本機資料夾掃描的結果不會持久化**：LocalLibrary 來源的模型與資料集只存在於記憶體，後端重啟後需重新掃描（一般上傳的內容仍照常保留）。
+- **驗證評估僅支援 YOLO 架構**：`model.val()` 是 Ultralytics 專屬，SSDLite 需要另一套評估流程，UI 上會顯示但停用並說明原因。
+- **上傳的資料集 ZIP 無法用於評估**：分析階段完全不解壓縮，影像位元組在請求結束後即釋放。請改用本機資料夾。
+- **評估未提供 COCO 式分桶 AP**：以「每類別 AP × 中位框面積」呈現尺度與表現的關係作為替代。
 
-更完整的已知限制清單與各項限制的技術背景，請參考 [docs/architecture.md](docs/architecture.md#8-已知限制)。
+更完整的已知限制清單與各項限制的技術背景，請參考 [docs/architecture.md](docs/architecture.md#9-已知限制)。

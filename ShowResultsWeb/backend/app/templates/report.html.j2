@@ -1,0 +1,267 @@
+{# 自足的 HTML 報告：所有圖片以 data URI 內嵌，離線可讀。
+   @media print 規則讓瀏覽器 Ctrl+P 直接產出乾淨的 PDF（本專案不引入 reportlab）。 #}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+<style>
+  :root {
+    --ink: #16202c; --muted: #5d6b7a; --line: #dde3ea; --bg: #ffffff;
+    --accent: #0f766e; --warn: #b45309; --bad: #b91c1c; --soft: #f6f8fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 32px; background: var(--bg); color: var(--ink);
+    font-family: "Noto Sans TC", "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.65; font-size: 15px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 19px; margin: 40px 0 14px; padding-bottom: 8px; border-bottom: 2px solid var(--line); }
+  h3 { font-size: 15px; margin: 24px 0 10px; color: var(--accent); }
+  p { margin: 8px 0; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .meta-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 10px; background: var(--soft); border: 1px solid var(--line);
+    border-radius: 8px; padding: 14px 16px; font-size: 12.5px;
+  }
+  .meta-grid div span { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .meta-grid div b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13.5px; }
+  th, td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; font-variant-numeric: normal; }
+  thead th { background: var(--soft); font-weight: 600; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  tbody tr.weak td { background: #fff7ed; }
+  tbody tr.weak td:first-child::after { content: " ▲"; color: var(--warn); font-size: 11px; }
+  .note { border-left: 3px solid var(--accent); background: var(--soft); padding: 10px 14px; margin: 14px 0; font-size: 13px; }
+  .note.warn { border-left-color: var(--warn); background: #fffbeb; }
+  .note.bad { border-left-color: var(--bad); background: #fef2f2; }
+  figure { margin: 18px 0; }
+  figure img { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; }
+  figcaption { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .plots { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; }
+  svg { max-width: 100%; height: auto; }
+  svg .grid { stroke: var(--line); stroke-width: 1; }
+  svg .tick { fill: var(--muted); font-size: 11px; }
+  svg .tick-y { text-anchor: end; }
+  svg .tick-x { text-anchor: middle; }
+  svg .axis-label { fill: var(--muted); font-size: 12px; text-anchor: middle; }
+  svg .dot { fill: var(--accent); fill-opacity: .85; }
+  svg .dot-weak { fill: var(--bad); }
+  svg .dot-label { fill: var(--ink); font-size: 11px; }
+  ul.limits { font-size: 13px; color: var(--muted); padding-left: 20px; }
+  ul.limits li { margin: 5px 0; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+
+  @media print {
+    body { padding: 0; font-size: 11.5pt; }
+    h2 { page-break-after: avoid; }
+    section, figure, table { page-break-inside: avoid; }
+    .plots { grid-template-columns: 1fr 1fr; }
+    a { text-decoration: none; color: inherit; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>{{ title }}</h1>
+  <p class="sub">
+    本報告的所有指標皆由本機在報告產生當下重新計算，**不是**訓練過程留下的歷史數值。
+  </p>
+
+  <div class="meta-grid">
+    <div><span>產生時間</span><b>{{ env.generated_at[:19].replace('T', ' ') }} UTC</b></div>
+    <div><span>推論裝置</span><b>{{ env.device | upper }}</b></div>
+    <div><span>PyTorch</span><b>{{ env.torch or '—' }}</b></div>
+    <div><span>Ultralytics</span><b>{{ env.ultralytics or '—' }}</b></div>
+    <div><span>評估資料集</span><b>{{ datasets | join('、') or '—' }}</b></div>
+    <div><span>Split</span><b>{{ splits | join('、') or '—' }}</b></div>
+  </div>
+
+  {% if views | length > 1 %}
+    {% if comparable %}
+      <div class="note">
+        以下 {{ views | length }} 個模型跑的是<strong>同一個資料集的同一個 split</strong>，
+        因此指標可直接比較。這是消融比較成立的前提。
+      </div>
+    {% else %}
+      <div class="note warn">
+        以下模型使用了<strong>不同的資料集或 split</strong>，指標<strong>不可直接互相比較</strong>。
+        若要做消融比較，請讓所有模型跑同一份測試集。
+      </div>
+    {% endif %}
+  {% endif %}
+
+  {# --- 總覽對照表 --- #}
+  <h2>1. 實測指標總覽</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>模型</th><th>資料集 / Split</th><th>影像數</th>
+        <th>mAP@50</th><th>mAP@50-95</th><th>Precision</th><th>Recall</th><th>耗時</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for v in views %}
+      <tr>
+        <td>{{ v.session_name }}</td>
+        <td>{{ v.dataset_name }} / {{ v.split }}</td>
+        <td>{{ '{:,}'.format(v.image_count) if v.image_count else '—' }}</td>
+        <td><b>{{ '%.4f' % v.overall.map50 if v.overall.map50 is not none else '—' }}</b></td>
+        <td>{{ '%.4f' % v.overall.map50_95 if v.overall.map50_95 is not none else '—' }}</td>
+        <td>{{ '%.4f' % v.overall.precision if v.overall.precision is not none else '—' }}</td>
+        <td>{{ '%.4f' % v.overall.recall if v.overall.recall is not none else '—' }}</td>
+        <td>{{ '%.0f s' % v.elapsed_seconds if v.elapsed_seconds else '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {# --- 資料集摘要 --- #}
+  {% if dataset %}
+  <h2>2. 資料集組成</h2>
+  <div class="meta-grid">
+    <div><span>格式</span><b>{{ dataset.format | upper }}</b></div>
+    <div><span>影像總數</span><b>{{ '{:,}'.format(dataset.total_images or 0) }}</b></div>
+    <div><span>標註總數</span><b>{{ '{:,}'.format(dataset.total_annotations or 0) }}</b></div>
+    <div><span>負樣本（空標註）</span><b>{{ '{:,}'.format(dataset.background_images or 0) }}</b></div>
+    <div><span>宣告類別數</span><b>{{ dataset.declared_nc or '—' }}</b></div>
+  </div>
+  {% if dataset.splits %}
+  <table>
+    <thead><tr><th>Split</th><th>影像</th><th>標註</th><th>每張標註數</th><th>負樣本</th></tr></thead>
+    <tbody>
+      {% for s in dataset.splits %}
+      <tr>
+        <td>{{ s.name }}</td>
+        <td>{{ '{:,}'.format(s.images or 0) }}</td>
+        <td>{{ '{:,}'.format(s.annotations or 0) }}</td>
+        <td>{{ '%.2f' % (s.annotations_per_image or 0) }}</td>
+        <td>{{ '{:,}'.format(s.background_images or 0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% if dataset.issues %}
+  <div class="note warn">
+    資料集健檢有 {{ dataset.issues | length }} 項提醒：
+    {{ dataset.issues | map(attribute='message') | join('；') }}
+  </div>
+  {% endif %}
+  {% endif %}
+
+  {# --- 每個模型的詳細結果 --- #}
+  {% for v in views %}
+  <section>
+    <h2>{{ loop.index + (2 if dataset else 1) }}. {{ v.session_name }}</h2>
+
+    {% if v.vocab_check.status == 'name_drift' %}
+    <div class="note warn">
+      <strong>類別名稱不一致：</strong>{{ v.vocab_check.message }}
+      {% for d in v.vocab_check.differences %}
+        <br>索引 {{ d.index }}：模型「{{ d.model }}」 vs 資料集「{{ d.dataset }}」
+      {% endfor %}
+    </div>
+    {% elif v.vocab_check.status == 'match' %}
+    <p class="sub">類別詞彙比對通過（{{ v.vocab_check.model_nc }} 類完全一致）。</p>
+    {% endif %}
+
+    <h3>逐類別表現（依 AP@50 由低至高）</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>類別</th><th>AP@50</th><th>AP@50-95</th><th>Precision</th><th>Recall</th>
+          <th>標註框數</th><th>中位框面積</th><th>極小框佔比</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in v.rows %}
+        <tr class="{{ 'weak' if r.weak else '' }}">
+          <td>{{ r.name }}</td>
+          <td><b>{{ '%.4f' % r.ap50 }}</b></td>
+          <td>{{ '%.4f' % r.ap50_95 }}</td>
+          <td>{{ '%.4f' % r.precision }}</td>
+          <td>{{ '%.4f' % r.recall }}</td>
+          <td>{{ '{:,}'.format(r.boxes) if r.boxes is not none else '—' }}</td>
+          <td>{{ '%.3f%%' % r.median_area_pct if r.median_area_pct is not none else '—' }}</td>
+          <td>{{ '%.1f%%' % r.tiny_pct if r.tiny_pct is not none else '—' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="sub">
+      ▲ 標記代表 AP@50 低於 {{ weak_threshold }}。「極小框」指面積小於整張影像 0.1% 的標註。
+    </p>
+
+    {% if v.scatter %}
+    <h3>AP 與物件尺度的關係</h3>
+    <figure>
+      {{ v.scatter | safe }}
+      <figcaption>
+        每個點是一個類別。若低 AP 集中在左側（小物件），代表模型的瓶頸在小尺度特徵擷取——
+        這正是高解析度 P2 檢測層要解決的問題。
+      </figcaption>
+    </figure>
+    {% endif %}
+
+    {% if v.plots.confusion_matrix or v.plots.pr_curve %}
+    <h3>混淆矩陣與 PR 曲線</h3>
+    <div class="plots">
+      {% if v.plots.confusion_matrix %}
+      <figure>
+        <img src="{{ v.plots.confusion_matrix }}" alt="混淆矩陣">
+        <figcaption>混淆矩陣（本次評估重新計算）</figcaption>
+      </figure>
+      {% endif %}
+      {% if v.plots.confusion_matrix_normalized %}
+      <figure>
+        <img src="{{ v.plots.confusion_matrix_normalized }}" alt="正規化混淆矩陣">
+        <figcaption>正規化混淆矩陣</figcaption>
+      </figure>
+      {% endif %}
+      {% if v.plots.pr_curve %}
+      <figure>
+        <img src="{{ v.plots.pr_curve }}" alt="PR 曲線">
+        <figcaption>Precision-Recall 曲線</figcaption>
+      </figure>
+      {% endif %}
+      {% if v.plots.f1_curve %}
+      <figure>
+        <img src="{{ v.plots.f1_curve }}" alt="F1 曲線">
+        <figcaption>F1-Confidence 曲線</figcaption>
+      </figure>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if v.speed_ms %}
+    <p class="sub">
+      單張影像處理時間（{{ env.device | upper }}）：
+      {% for k, ms in v.speed_ms.items() %}{{ k }} {{ '%.2f' % ms }} ms{{ '、' if not loop.last }}{% endfor %}
+    </p>
+    {% endif %}
+  </section>
+  {% endfor %}
+
+  <h2>已知限制</h2>
+  <ul class="limits">
+    <li>指標由 Ultralytics 的驗證流程計算。本工具刻意不自行實作 mAP，以免與標準實作產生無法解釋的差異。</li>
+    <li>未提供 COCO 式 small / medium / large 分桶 AP。以「每類別 AP × 中位框面積」呈現尺度與表現的關係作為替代。</li>
+    <li>推論在 {{ env.device | upper }} 上執行，時間數據不代表其他硬體（尤其是邊緣裝置）的表現。</li>
+    <li>標註框數少的類別，其 AP 的統計不確定性較高，解讀時應一併參考該類別的框數欄位。</li>
+    <li>評估僅涵蓋 YOLO 架構；SSDLite 需要另一套評估流程。</li>
+  </ul>
+
+  <footer>
+    由柑橘病蟲害工具包產生 · {{ env.generated_at[:19].replace('T', ' ') }} UTC ·
+    以瀏覽器列印（Ctrl+P）可另存為 PDF
+  </footer>
+
+</div>
+</body>
+</html>

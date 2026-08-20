@@ -17,6 +17,8 @@ app/routers/
   datasets.py                  資料集上傳分析 / 列表 / 刪除
   exports.py                   模型格式轉換：能力查詢 / 送出 job / 輪詢 / 下載 / 刪除
   local_library.py             本機資料夾：路徑查詢 / 掃描（唯讀）/ 載入勾選項目
+  evaluations.py               驗證評估：可用目標查詢 / 送出 / 輪詢 / 圖表 / 刪除
+  reports.py                   成果報告：產生 / 列表 / 檢視 / 下載 / 刪除
   devices.py                   裝置列舉 / 切換
   inference.py                 執行推論（sync def，靠 FastAPI 執行緒池跑 PyTorch）
   metrics.py                   results.png 裁切、獨立圖表（confusion matrix 等）
@@ -29,6 +31,9 @@ app/services/
   export_capabilities.py       匯出能力探測：OS 閘 + 相依探測（find_spec，不 import）
   export_service.py            匯出 job 表、daemon worker、產物與 manifest 生命週期
   library_scanner.py           LocalLibrary 的探索（唯讀列出候選項）與註冊（只處理勾選項）
+  evaluation_service.py        評估 job 表、daemon worker、model.val() 與指標正規化
+  dataset_resolver.py          把資料集記錄解析成磁碟上真實的 split 目錄
+  report_service.py            Jinja2 渲染、圖片 base64 內嵌、寫入 REPORTS_DIR
   model_service.py             ModelManager 單例：同時只保留一個模型在記憶體
   device_service.py            裝置探測結果快取（30s TTL）
 app/utils/
@@ -41,7 +46,9 @@ app/utils/
 tests/                         pytest 單元測試（zip_handler / image_cropper / session_manager /
                                dataset_analyzer / dataset_manager / dataset_dir /
                                dir_handler / export_service / export_routes /
-                               local_library_router / session_container_dirs，共 160 項）
+                               local_library_router / evaluation_service /
+                               evaluation_routes / dataset_resolver /
+                               session_container_dirs，共 215 項）
 ```
 
 ### 關鍵設計決策（有意保留，非缺陷）
@@ -55,10 +62,10 @@ tests/                         pytest 單元測試（zip_handler / image_cropper
 ## 3. 前端（`ShowResultsWeb/frontend/src/`）
 
 ```
-main.jsx → App.jsx                     四分頁 SPA：模型與裝置 / 消融分析 / 即時診斷 / 資料集
+main.jsx → App.jsx                     五分頁 SPA：模型與裝置 / 消融分析 / 即時診斷 / 資料集 / 驗證評估
                                        （模型匯出是 session 卡片上的動作，不另開分頁）
 context/
-  ExperimentContext.jsx                組合層 Provider：組合六個獨立 hook，對外仍暴露單一 useExperiment()
+  ExperimentContext.jsx                組合層 Provider：組合七個獨立 hook，對外仍暴露單一 useExperiment()
   hooks/
     useSessions.js                     Session 清單、CRUD、載入狀態
     useDeviceControl.js                裝置清單與目前選用裝置
@@ -66,6 +73,7 @@ context/
     useDatasetState.js                 資料集分析結果與進行中的請求（跨分頁切換不遺失）
     useModelExport.js                  匯出 job 狀態與輪詢迴圈（跨分頁切換不遺失）
     useLocalLibrary.js                 本機資料夾路徑、候選清單與勾選狀態（跨分頁切換不遺失）
+    useEvaluation.js                   評估 job 輪詢、報告清單（跨分頁切換不遺失）
 components/
   SystemSpecs.jsx                      上傳、裝置選擇、session 管理
   MetricDashboard.jsx                  消融看板協調器（狀態 + 資料抓取 + 版面）
@@ -108,7 +116,7 @@ components/
 
 ### Context 組合模式
 
-`ExperimentContext.jsx` 本身不持有業務狀態，而是組合 `useSessions`、`useDeviceControl`、`useLiveDemoState`、`useDatasetState`、`useModelExport`、`useLocalLibrary` 六個獨立 hook 的回傳值，攤平後透過同一個 `useExperiment()` 對外暴露。這是刻意的 adapter 設計：既有元件（`SystemSpecs.jsx`、`LiveDemo.jsx`、`MetricDashboard.jsx`、`App.jsx`）呼叫 `useExperiment()` 的方式完全不需變動，同時六個 hook 各自獨立、可單獨測試或重用。`deleteSession` 是唯一的例外——組合層額外包了一層，在刪除後若已無任何 session，會呼叫 `setActiveTab('init')`（此邏輯原本就存在，只是搬到組合層，因為 `activeTab` 屬於頁面導覽狀態、不屬於任一個子 hook）。
+`ExperimentContext.jsx` 本身不持有業務狀態，而是組合 `useSessions`、`useDeviceControl`、`useLiveDemoState`、`useDatasetState`、`useModelExport`、`useLocalLibrary`、`useEvaluation` 七個獨立 hook 的回傳值，攤平後透過同一個 `useExperiment()` 對外暴露。這是刻意的 adapter 設計：既有元件（`SystemSpecs.jsx`、`LiveDemo.jsx`、`MetricDashboard.jsx`、`App.jsx`）呼叫 `useExperiment()` 的方式完全不需變動，同時七個 hook 各自獨立、可單獨測試或重用。`deleteSession` 是唯一的例外——組合層額外包了一層，在刪除後若已無任何 session，會呼叫 `setActiveTab('init')`（此邏輯原本就存在，只是搬到組合層，因為 `activeTab` 屬於頁面導覽狀態、不屬於任一個子 hook）。
 
 ## 4. 資料集分析（第 4 分頁）
 
@@ -328,7 +336,97 @@ LocalLibrary 來源的 session/dataset 只存在於記憶體的 `ACTIVE_SESSIONS
 - **資料集逐個頂層項目探測**，而非對整棵樹跑一次分析——後者只會回報分數最高的那一個，多個並存的資料集會被吞掉。根目錄本身最後才探測一次，涵蓋「data.yaml 與 train/ 直接放在頂層」的情形，並以偵測到的根路徑去重。
 - **`source_type` 用字面值 `"single_weight"`**（散落權重檔）：`ModelMetricCard.jsx` 用精確比對決定「Weight Only」徽章，沒有 fallback。
 
-## 7. Docker 環境的路徑對齊（重要）
+## 7. 驗證評估與成果報告
+
+讓載入的模型實際跑過資料集，算出**當下的**指標；再把結果打包成可交付的 HTML 報告。
+
+### 這個功能填補的是一個結構性缺口
+
+在此之前，`ACTIVE_SESSIONS` 與 `ACTIVE_DATASETS` 是兩個**永不交集**的登錄表——沒有任何端點同時接受 `session_id` 與 `dataset_id`。而消融分析頁顯示的每一個數字，都是 `/api/metrics` 從訓練當時的 `results.png` 切出來的圖片切片（見 `image_cropper.py`），不是計算結果。
+
+後果是：兩個模型的 mAP 可能來自**不同的資料集與不同的 split**，並列比較在方法學上無效。消融研究的前提就是共同的評估協定，本功能提供那個協定。
+
+實測差異可觀：v5 的 150-epoch 模型，`results.csv` 記錄的 mAP50 是 **0.803**（訓練時在 valid 上），本工具在 test split 實測為 **0.862**。兩者都對，但它們回答的不是同一個問題。
+
+### 為什麼用 `model.val()` 而不自己算 mAP
+
+自行實作 IoU 配對與 PR 積分很容易在細節上算錯（插值方式、NMS 前後順序、重複配對），而一個「自己算的、和 ultralytics 對不上的 mAP」在學術場合是負分。`val()` 另外還免費產出 confusion matrix 與 PR/F1 曲線，正好是既有 `/api/metrics` 已在展示的圖種。
+
+代價是只支援 YOLO——SSDLite 需要另一套評估迴圈。比照匯出功能的先例，UI 上**顯示但停用並說明原因**。
+
+### 類別詞彙比對是最重要的正確性前提
+
+模型 checkpoint 的 `names` 與資料集 `data.yaml` 的 `names`/`nc` 若不一致，算出來的每一個數字都是垃圾，而且**不會有任何錯誤訊息**——ultralytics 只會照索引配對。
+
+```
+nc 不同      → 硬性拒絕，訊息說明雙方類別數
+nc 同、名稱異 → 允許執行，但結果與報告標紅警告並列出差異
+```
+
+這不是假想風險：`model_service.py` 的 SSD 類別表寫死 12 類、`num_classes=13`，而實際的 v5 資料集是 8 類。
+
+比對刻意排在 **validating 之前**——讓使用者等 4 分鐘才得知類別對不上是最糟的順序。
+
+### 資料集來源決定可不可以評估
+
+| 來源 | 可否評估 | 機制 |
+|---|---|---|
+| LocalLibrary 資料夾 | ✅ | 就地引用，**零複製** |
+| LocalLibrary ZIP | ✅ | 只解出被評估的那**一個** split |
+| 上傳的 ZIP | ❌ | 位元組已不存在 |
+
+上傳 ZIP 走的是 Starlette 的 `SpooledTemporaryFile`，請求結束即消失（見 §4「完全不解壓縮」）。這是核心設計決策的必然代價，不是可補救的疏漏，因此 UI 給的是說明而非失敗。
+
+ZIP 只解單一 split 是可用性關鍵：整包 4.3 GB，而 test split 只有約 240 MB。解壓內容在標記 `done` **之前**就清掉——若留到 `finally`，「狀態是 done」與「暫存已清空」之間會有時間差，觀察者看到的 done 就不誠實。
+
+**順帶修正的資料模型缺陷**：`stats["source_path"]` 是「容器路徑 + 內層前綴」黏合後再 `normcase` 的**去重鍵**，對 ZIP 來源根本不是可開啟的路徑。因此新增 `source_container`（真實可開啟的 .zip 或資料夾）與 `source_inner_prefix` 兩個欄位，讓要讀檔的功能不必反解字串。
+
+### 逐尺度分析：範圍的誠實界定
+
+**有做**：每類別的框尺寸剖面（中位面積、極小框佔比），直接讀標註文字檔算出，不需推論。與每類別 AP 並排即為「AP × 中位框面積」散點圖（X 軸取對數——實測中位面積從 0.19% 到 52%，跨三個數量級，線性軸會把小物件類別擠成一團）。
+
+**沒做**：COCO 式 small/medium/large 分桶 AP。那需要自行實作配對迴圈，與上面「不自己算 mAP」同樣的理由。此限制在結果頁與報告中都明列。
+
+實測結果值得記錄，因為它**推翻了直覺的假設**：
+
+| 類別 | AP@50 | 中位框面積 |
+|---|---|---|
+| Sooty_Mold | 0.990 | 52.2% |
+| Black_Spot | 0.956 | 43.4% |
+| Scale_Insect | 0.877 | 0.216% |
+| Canker | 0.803 | 0.187% |
+| Aphid | 0.798 | 4.76% |
+| Thrips | 0.697 | 3.22% |
+
+最小的兩個類別（Canker、Scale_Insect）表現**優於**比它們大 15–25 倍的 Thrips 與 Aphid。所以「越小越差」並不成立，弱勢類別的瓶頸另有原因。這正是這個功能的價值：它給的是真實結構，而不是預期的結論。
+
+### 評估結果跨重啟存活，且刻意不做孤兒清除
+
+與 `export_service` 明確不同：匯出產物只有搭配該 session 的下載連結才有意義，但評估結果是一次**測量**——指標、逐類別拆解與圖表本身就是完整資訊。
+
+而且在本專案裡「來源 session 還在嗎」這個過濾等於**永遠刪光**：絕大多數 session 來自 LocalLibrary 掃描，依設計不落地持久化，重啟後 session id 必然不存在。一次評估要跑 4 分鐘，因為模型沒被重新載入就丟掉測量結果是不能接受的。
+
+### 報告：一個檔案就是全部
+
+所有圖表以 base64 data URI 內嵌，因此報告可離線開啟、可直接寄出、可放進附錄。用 `<img src="/api/...">` 的報告一離開這台機器就壞了。實測產出約 1.1 MB、零外部資源引用。
+
+**PDF 走瀏覽器列印**（模板含 `@media print`）。不引入 `reportlab`：它沒被安裝，為一份報告增加相依不划算，而瀏覽器的列印引擎對中文與網頁版面的支援更好。這件事必須在 UI 上講清楚，否則使用者會一直找一顆不存在的「匯出 PDF」按鈕。
+
+Jinja2 隨 torch 傳遞安裝，**沒有新增任何套件**。
+
+報告產生時會檢查所有評估是否用同一個資料集與 split：不同就在報告開頭標紅「指標不可直接比較」。默默並列不同測試集的數字，比不做這個功能更糟。
+
+這也是 `REPORTS_DIR` 的第一個使用者——它在 `config.py` 定義了六處但零 importer，唯一作用是開機時建立一個空資料夾。
+
+### 效能實測（CPU）
+
+445 張影像、2,300 個標註框：**單張推論 435 ms，全程約 4 分鐘**。原先估的 45–60 秒過度樂觀，UI 文案已依實測修正。本機 venv 與 Docker 都是 CPU-only torch（機器有 RTX 3050，但 torch 是 CPU build）。
+
+### 新容器目錄的白名單
+
+`extracted_runs/evaluations/` 已加入 `delete_session()` 的容器白名單。這是 §5 記錄過的同一個坑第四次現形（`datasets`／`exports`／`local_library` 各踩過一次），`tests/test_session_container_dirs.py` 的參數化清單同步補上。
+
+## 8. Docker 環境的路徑對齊（重要）
 
 映像檔把專案結構**攤平**成 `/app/backend` 與 `/app/frontend`，並沒有主機端的 `ShowResultsWeb/` 這一層。而 `config.py` 的 `PROJECT_ROOT` 預設值是 `BACKEND_DIR.parent.parent`：
 
@@ -345,7 +443,7 @@ docker compose exec citrus-detection-app python -c "from app.core.config import 
 
 輸出應為 `/app/Datasets/samples`，且 `curl localhost:8000/samples/<某張實際存在的圖>` 應回 200。
 
-## 8. 已知限制
+## 9. 已知限制
 
 - E2E 測試有兩支，都需要後端已在執行、且在缺素材時優雅跳過；CI 僅涵蓋單元測試與前端編譯檢查，不含端到端流程。
   `e2e_tests/e2e_local_library.py` 是主力，用 `LocalLibrary/` 內的真實檔案跑完十個階段（掃描唯讀性、勾選載入、使用者檔案指紋、指標圖、推論對照真實標註、資料集分析對照 ZIP 實際成員數、ONNX/TFLite 匯出、刪除安全性）；`e2e_tests/e2e_test.py` 是早期的上傳流程煙霧測試，需要 `E2E_ASSETS_DIR` 指向特定佈局的素材夾。

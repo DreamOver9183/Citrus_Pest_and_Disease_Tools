@@ -71,6 +71,10 @@ body {
   box-shadow: 0 0 25px 4px rgba(244, 63, 94, 0.18);
 }
 
+.animate-glow-cyan {
+  box-shadow: 0 0 25px 4px rgba(6, 182, 212, 0.18);
+}
+
 /* Premium ambient color highlights */
 .bg-radial-gradient-teal {
   background: radial-gradient(circle at center, rgba(20, 184, 166, 0.12) 0%, transparent 65%);

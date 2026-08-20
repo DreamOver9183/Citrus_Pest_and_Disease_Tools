@@ -106,7 +106,13 @@ def _base_result(zip_name: str) -> Dict[str, Any]:
         "definition": None,
         # 來源目錄的絕對路徑。僅 LocalLibrary 掃描會填值；ZIP 上傳恆為 None。
         # 同時作為去重鍵與「不寫入 datasets.json」的持久化過濾標記。
+        # 注意它經過 normcase 且對 ZIP 來源是「檔案路徑 + 內層前綴」的黏合，不可直接開啟——
+        # 要真正讀取檔案請用下面兩個欄位。
         "source_path": None,
+        # 可開啟的容器（資料夾路徑或 .zip 檔路徑）與資料集根目錄在容器內的相對前綴。
+        # 兩者同樣只有 LocalLibrary 來源會填值。
+        "source_container": None,
+        "source_inner_prefix": None,
         "issues": [],
     }
 

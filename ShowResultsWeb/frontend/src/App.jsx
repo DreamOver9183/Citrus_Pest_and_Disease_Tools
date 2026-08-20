@@ -4,7 +4,8 @@ import SystemSpecs from './components/SystemSpecs';
 import MetricDashboard from './components/MetricDashboard';
 import LiveDemo from './components/LiveDemo';
 import DatasetAnalyzer from './components/DatasetAnalyzer';
-import { Layers, Activity, BarChart2, Zap, Cpu, Database, Sparkles, Server, CheckCircle2, FolderTree } from 'lucide-react';
+import Evaluation from './components/Evaluation';
+import { Layers, Activity, BarChart2, Zap, Cpu, Database, Sparkles, Server, CheckCircle2, FolderTree, GaugeCircle } from 'lucide-react';
 
 const AppContent = () => {
   const { activeTab, setActiveTab, isUnzipped, loading, sessionCount, currentDeviceLabel } = useExperiment();
@@ -93,7 +94,8 @@ const AppContent = () => {
             </div>
 
             {/* 功能切換 Tabs (Multi-Colored, Clean Interactive Styling) */}
-            <nav className="flex items-center bg-slate-950/70 p-1 rounded-xl border border-white/[0.08] shadow-inner font-sans">
+            {/* 五個分頁在窄螢幕會超出一行，flex-wrap 讓它換行而不是撐破版面 */}
+            <nav className="flex flex-wrap items-center gap-y-1 bg-slate-950/70 p-1 rounded-xl border border-white/[0.08] shadow-inner font-sans">
               <button
                 onClick={() => setActiveTab('init')}
                 className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
@@ -150,6 +152,22 @@ const AppContent = () => {
                 <FolderTree className="w-3.5 h-3.5" />
                 資料集
               </button>
+
+              <button
+                onClick={() => isUnzipped && setActiveTab('evaluate')}
+                disabled={!isUnzipped}
+                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
+                  activeTab === 'evaluate'
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/15 animate-glow-cyan'
+                    : !isUnzipped
+                    ? 'text-gray-600 cursor-not-allowed opacity-40'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5 cursor-pointer'
+                }`}
+                title={!isUnzipped ? "請先載入模型" : "讓模型實跑資料集，計算當下的指標"}
+              >
+                <GaugeCircle className="w-3.5 h-3.5" />
+                驗證評估
+              </button>
             </nav>
 
           </div>
@@ -161,6 +179,7 @@ const AppContent = () => {
           {activeTab === 'metrics' && <MetricDashboard />}
           {activeTab === 'demo' && <LiveDemo />}
           {activeTab === 'dataset' && <DatasetAnalyzer />}
+          {activeTab === 'evaluate' && <Evaluation />}
         </main>
       </div>
 

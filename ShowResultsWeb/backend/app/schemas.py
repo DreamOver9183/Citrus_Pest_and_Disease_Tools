@@ -176,8 +176,12 @@ class DatasetStatsOut(BaseModel):
     classes: List[DatasetClassStat] = []
     prefix_check: Optional[DatasetPrefixCheck] = None
     definition: Optional[DatasetDefinition] = None
-    # 來源目錄絕對路徑；僅本機資料夾掃描會有值
+    # 來源目錄絕對路徑；僅本機資料夾掃描會有值。經 normcase，且 ZIP 來源時是
+    # 「.zip 路徑 + 內層前綴」的黏合，不可直接開啟——要讀檔請用下面兩個欄位。
     source_path: Optional[str] = None
+    # 可開啟的容器（資料夾或 .zip 檔）與資料集根目錄在其中的相對前綴
+    source_container: Optional[str] = None
+    source_inner_prefix: Optional[str] = None
     issues: List[DatasetIssue] = []
 
     model_config = {"extra": "allow"}
@@ -293,3 +297,134 @@ class LocalLibraryRegisterResponse(BaseModel):
     message: Optional[str] = None
     sessions: Dict[str, SessionOut] = {}
     datasets: Dict[str, DatasetStatsOut] = {}
+
+
+# --- 驗證評估 ---------------------------------------------------------------
+
+class EvalVocabCheck(BaseModel):
+    """模型與資料集的類別表比對結果。status: match | name_drift | mismatch"""
+    status: str
+    model_nc: int = 0
+    dataset_nc: int = 0
+    model_names: List[str] = []
+    dataset_names: List[str] = []
+    differences: List[Dict[str, Any]] = []
+    message: Optional[str] = None
+
+
+class EvalOverall(BaseModel):
+    map50: float
+    map50_95: float
+    precision: float
+    recall: float
+
+
+class EvalClassResult(BaseModel):
+    class_id: int
+    name: str
+    precision: float
+    recall: float
+    ap50: float
+    ap50_95: float
+
+
+class EvalSizeProfile(BaseModel):
+    """每類別的標註框尺寸剖面，與 AP 並排即為小物件表現的證據。"""
+    class_id: int
+    name: str
+    boxes: int
+    median_area_pct: Optional[float] = None
+    min_area_pct: Optional[float] = None
+    max_area_pct: Optional[float] = None
+    tiny_pct: Optional[float] = None
+
+
+class EvalJobOut(BaseModel):
+    job_id: str
+    session_id: Optional[str] = None
+    session_name: Optional[str] = None
+    dataset_id: Optional[str] = None
+    dataset_name: Optional[str] = None
+    split: Optional[str] = None
+    state: str
+    stage: str
+    stage_label: str
+    progress: int = 0
+    message: Optional[str] = None
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    elapsed_seconds: Optional[float] = None
+    image_count: Optional[int] = None
+    vocab_check: Optional[EvalVocabCheck] = None
+    overall: Optional[EvalOverall] = None
+    per_class: Optional[List[EvalClassResult]] = None
+    size_profile: Optional[List[EvalSizeProfile]] = None
+    speed_ms: Optional[Dict[str, float]] = None
+    plot_urls: Optional[Dict[str, str]] = None
+    log_tail: List[str] = []
+
+    model_config = {"extra": "allow"}
+
+
+class EvalTargetDataset(BaseModel):
+    """可評估的資料集及其原因說明（不可評估時仍會列出，比照匯出的「顯示但停用」慣例）。"""
+    dataset_id: str
+    name: str
+    format: Optional[str] = None
+    available: bool
+    reason: Optional[str] = None
+    splits: List[str] = []
+    default_split: Optional[str] = None
+
+
+class EvalTargetsResponse(BaseModel):
+    status: str
+    datasets: List[EvalTargetDataset] = []
+    sessions: List[Dict[str, Any]] = []
+    message: Optional[str] = None
+
+
+class EvalSubmitRequest(BaseModel):
+    session_id: str
+    dataset_id: str
+    split: Optional[str] = None
+
+
+class EvalJobResponse(BaseModel):
+    status: str
+    job: Optional[EvalJobOut] = None
+    message: Optional[str] = None
+
+
+class EvalJobsResponse(BaseModel):
+    status: str
+    jobs: List[EvalJobOut] = []
+
+
+# --- 報告匯出 ---------------------------------------------------------------
+
+class ReportOut(BaseModel):
+    report_id: str
+    filename: str
+    title: str
+    created_at: str
+    size_kb: float
+    job_ids: List[str] = []
+    download_url: str
+
+
+class ReportGenerateRequest(BaseModel):
+    job_ids: List[str] = []
+    title: Optional[str] = None
+
+
+class ReportResponse(BaseModel):
+    status: str
+    report: Optional[ReportOut] = None
+    message: Optional[str] = None
+
+
+class ReportsResponse(BaseModel):
+    status: str
+    reports: List[ReportOut] = []

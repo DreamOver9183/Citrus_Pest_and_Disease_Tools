@@ -10,9 +10,13 @@ from app.services.session_manager import (
     cleanup_temp_files,
     cleanup_legacy_runs,
 )
-from app.routers import sessions, devices, inference, metrics, chart_generator, datasets, exports, local_library
+from app.routers import (
+    sessions, devices, inference, metrics, chart_generator, datasets, exports,
+    local_library, evaluations, reports,
+)
 from app.services.dataset_manager import load_datasets_from_disk
 from app.services.export_service import load_export_jobs_from_disk
+from app.services.evaluation_service import load_jobs_from_disk as load_eval_jobs_from_disk
 
 # 初始化目錄
 try:
@@ -42,6 +46,8 @@ app.include_router(chart_generator.router, prefix="/api")
 app.include_router(datasets.router, prefix="/api")
 app.include_router(exports.router, prefix="/api")
 app.include_router(local_library.router, prefix="/api")
+app.include_router(evaluations.router, prefix="/api")
+app.include_router(reports.router, prefix="/api")
 
 # 掛載靜態推論/指標圖片暫存目錄
 app.mount("/static", StaticFiles(directory=str(TEMP_DIR)), name="static")
@@ -70,6 +76,9 @@ def startup_init():
     load_datasets_from_disk()
     # 必須在 load_sessions_from_disk() 之後：要用還原後的 session 清單過濾孤兒匯出
     load_export_jobs_from_disk(known_session_ids=set(ACTIVE_SESSIONS.keys()))
+    # 評估結果不做「來源 session 是否還在」的過濾——它是一次獨立的測量，
+    # 而本專案多數 session 來自不落地的 LocalLibrary，過濾等於每次重啟刪光。
+    load_eval_jobs_from_disk()
 
 # 掛載前端靜態頁面 (以利 Docker 一鍵啟動單容器託管)
 backend_current_dir = os.path.dirname(os.path.abspath(__file__))

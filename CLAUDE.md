@@ -59,13 +59,15 @@ E2E_ASSETS_DIR=<path> python e2e_tests/e2e_test.py   # 早期的上傳流程煙�
 
 7. **計算經過時間一律用 `time.monotonic()`，絕不與 `time.time()` 混用**。混用曾直接產出「29785752 分 60 秒」這種畫面（見 architecture.md §5）。
 
-8. **`ultralytics` 的環境變數（`YOLO_AUTOINSTALL`/`YOLO_OFFLINE`）只能設在 [app/__init__.py](ShowResultsWeb/backend/app/__init__.py)，不能設在 `config.py`**。`AUTOINSTALL` 是 ultralytics 的模組級常數，在 `import ultralytics` 當下就凍結；`model_service.py` 第 6 行 import ultralytics、第 10 行才 import config，config.py 已經太晚。package `__init__` 保證先於任何 submodule 執行才是唯一可靠位置。
+8. **任何會讓模型跑推論的新功能，都不得 import `model_service`**。`ModelManager._lock` 是非重入鎖且 `predict()` 全程持有，走它會讓所有推論請求排在你的長任務後面，而在持鎖狀態下呼叫 `load_model()` 直接死鎖。自建用完即丟的 `YOLO()` 實例（約 5MB），`export_service` 與 `evaluation_service` 都是這樣做的。
 
-9. **改動需要「讀取某個位元組來源」的邏輯（ZIP 解析、資料夾解析）時，優先看能不能用既有的 reader 抽象**（`ZipArchiveReader`/`DirArchiveReader`，見 architecture.md §6）。這兩者只包一層 `build_tree()`/`read(path, cap)`，上層的 YOLO/COCO/VOC 解析邏輯完全不用關心來源是 ZIP 還是真實目錄。目錄端的 `_DirEntryStat` **必須有真實的 `.file_size` 屬性，絕不能用 `None` 佔位**——`dataset_analyzer` 的截斷保護是 `if info is not None and not budget.try_spend(info.file_size)`，塞 `None` 會讓保護悄悄失效而不報錯。
+9. **`ultralytics` 的環境變數（`YOLO_AUTOINSTALL`/`YOLO_OFFLINE`）只能設在 [app/__init__.py](ShowResultsWeb/backend/app/__init__.py)，不能設在 `config.py`**。`AUTOINSTALL` 是 ultralytics 的模組級常數，在 `import ultralytics` 當下就凍結；`model_service.py` 第 6 行 import ultralytics、第 10 行才 import config，config.py 已經太晚。package `__init__` 保證先於任何 submodule 執行才是唯一可靠位置。
 
-10. **新增任何會把 session 的 `dir_path` 指到 `extracted_runs/<新容器>/` 底下的功能時，那個容器名一定要加進 `delete_session()` 的白名單**（[session_manager.py](ShowResultsWeb/backend/app/services/session_manager.py) 內的 `["temp_output", "temp", "reports", …]`）。該函式用字串切割反推刪除目標，容器名不在白名單就會 `rmtree` 整個容器根目錄，刪一個 session 連帶清空其他所有同類資料。`datasets`/`exports`/`local_library` 都各自踩過一次，`tests/test_session_container_dirs.py` 有參數化測試，新容器記得補一行。
+10. **改動需要「讀取某個位元組來源」的邏輯（ZIP 解析、資料夾解析）時，優先看能不能用既有的 reader 抽象**（`ZipArchiveReader`/`DirArchiveReader`，見 architecture.md §6）。這兩者只包一層 `build_tree()`/`read(path, cap)`，上層的 YOLO/COCO/VOC 解析邏輯完全不用關心來源是 ZIP 還是真實目錄。目錄端的 `_DirEntryStat` **必須有真實的 `.file_size` 屬性，絕不能用 `None` 佔位**——`dataset_analyzer` 的截斷保護是 `if info is not None and not budget.try_spend(info.file_size)`，塞 `None` 會讓保護悄悄失效而不報錯。
 
-11. **Pydantic `response_model_exclude_unset=True` 會靜默裁掉沒賦值的欄位**，前端拿到的會是 `undefined` 而非欄位不存在的 KeyError。新增回應欄位時記得在建構回應物件當下就賦值（哪怕是 `None`），不要依賴 Pydantic 預設值。
+11. **新增任何會把 session 的 `dir_path` 指到 `extracted_runs/<新容器>/` 底下的功能時，那個容器名一定要加進 `delete_session()` 的白名單**（[session_manager.py](ShowResultsWeb/backend/app/services/session_manager.py) 內的 `["temp_output", "temp", "reports", …]`）。該函式用字串切割反推刪除目標，容器名不在白名單就會 `rmtree` 整個容器根目錄，刪一個 session 連帶清空其他所有同類資料。`datasets`/`exports`/`local_library`/`evaluations` 都各自踩過一次，`tests/test_session_container_dirs.py` 有參數化測試，新容器記得補一行。
+
+12. **Pydantic `response_model_exclude_unset=True` 會靜默裁掉沒賦值的欄位**，前端拿到的會是 `undefined` 而非欄位不存在的 KeyError。新增回應欄位時記得在建構回應物件當下就賦值（哪怕是 `None`），不要依賴 Pydantic 預設值。
 
 ## 依賴版本鎖定，改動前三思
 
@@ -81,8 +83,10 @@ E2E_ASSETS_DIR=<path> python e2e_tests/e2e_test.py   # 早期的上傳流程煙�
 - 匯出只出 FP32，`quantize` 白名單刻意只放行 `32`/`None`——ONNX 的 FP16 轉換失敗在 ultralytics 內是被捕捉並警告的，等於會靜默交出標著 FP16 的 FP32 檔，貿然開放 FP16 選項會是使用者看不見的錯誤。
 - LocalLibrary 掃描結果不落地（重啟後消失）——這是設計目標本身（「直到系統關閉、刪除暫存」），不是忘記持久化。
 - LocalLibrary 的掃描**不會自動載入**任何東西，一定要使用者勾選後按載入——`MAX_SESSIONS` 只有 3，自動載入等於由掃描順序替使用者決定拿到哪幾個模型。
+- 評估**不自己實作 mAP**，一律走 `model.val()`——自行實作 IoU 配對與 PR 積分容易在細節上算錯，交出一個和 ultralytics 對不上的數字在學術場合是負分。同理刻意不做 COCO 式分桶 AP。
+- 已完成的評估結果**跨重啟保留，且不做「來源 session 還在嗎」的孤兒清除**（與 `export_service` 明確不同）——本專案多數 session 來自不落地的 LocalLibrary，那個過濾等於每次重啟刪光，而一次評估要跑 4 分鐘。
 
-完整清單見 [docs/architecture.md 已知限制](docs/architecture.md#8-已知限制)。
+完整清單見 [docs/architecture.md 已知限制](docs/architecture.md#9-已知限制)。
 
 ## 提交與推送慣例
 

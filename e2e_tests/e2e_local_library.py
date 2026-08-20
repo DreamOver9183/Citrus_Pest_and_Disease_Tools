@@ -25,6 +25,7 @@ import io
 import json
 import os
 import posixpath
+import re
 import sys
 import time
 import zipfile
@@ -180,7 +181,7 @@ def _parse_names(yaml_path):
 # ------------------------------------------------------------------- 測試階段
 
 def phase_preflight():
-    section("階段 1／10：連線與環境")
+    section("階段 1／12：連線與環境")
     devices = api("GET", "/devices")
     check("後端可連線且回報裝置清單", devices.get("status") == "success",
           f"目前裝置 {devices.get('current_device')}")
@@ -192,7 +193,7 @@ def phase_preflight():
 
 
 def phase_reset():
-    section("階段 2／10：清空既有狀態")
+    section("階段 2／12：清空既有狀態")
     sessions = api("GET", "/sessions").get("sessions", {})
     for sid in list(sessions):
         requests.post(f"{BASE_URL}/delete-session", data={"session_id": sid}, timeout=120)
@@ -205,7 +206,7 @@ def phase_reset():
 
 
 def phase_discovery():
-    section("階段 3／10：掃描（探索階段必須是唯讀的）")
+    section("階段 3／12：掃描（探索階段必須是唯讀的）")
     started = time.monotonic()
     scan = api("POST", "/local-library/scan")
     elapsed = time.monotonic() - started
@@ -240,7 +241,7 @@ def phase_discovery():
 
 
 def phase_register(candidates):
-    section("階段 4／10：勾選式載入（只載入選取的項目）")
+    section("階段 4／12：勾選式載入（只載入選取的項目）")
     by_kind = {}
     for c in candidates:
         by_kind.setdefault(c["source_kind"], []).append(c)
@@ -249,10 +250,10 @@ def phase_register(candidates):
     for kind in ("run_dir", "zip_run", "weight_file"):
         if by_kind.get(kind):
             chosen.append(by_kind[kind][0])
-    # 挑最小的資料集，避免重複分析 4 GB 的 ZIP 拖長測試
-    ds_candidates = [c for c in candidates if c["kind"] == "dataset"]
-    if ds_candidates:
-        chosen.append(min(ds_candidates, key=lambda c: c.get("size_mb") or 0))
+    # 全部資料集都載入。註冊本身是即時的（統計在探索階段就算好了，不會重跑分析），
+    # 而評估階段需要一個夠大的資料集才驗證得了東西——只載入最小的那份會挑到十幾張
+    # 影像的子集，模型什麼都偵測不到，指標全為 0 而無法斷言任何事。
+    chosen.extend(c for c in candidates if c["kind"] == "dataset")
 
     if not chosen:
         print("  LocalLibrary 內沒有可載入的項目，略過後續階段")
@@ -292,7 +293,7 @@ def phase_register(candidates):
 
 
 def phase_readonly(before):
-    section("階段 5／10：使用者檔案唯讀保證")
+    section("階段 5／12：使用者檔案唯讀保證")
     after = tree_fingerprint(LIBRARY_DIR)
     check("LocalLibrary 檔案數未變", before[0] == after[0], f"{before[0]} → {after[0]}")
     check("LocalLibrary 內容指紋未變（大小與 mtime 皆未動）",
@@ -300,7 +301,7 @@ def phase_readonly(before):
 
 
 def phase_metrics(sessions):
-    section("階段 6／10：指標與圖表")
+    section("階段 6／12：指標與圖表")
     # 注意 /api/generate-chart 是 SSD 專用的手繪曲線端點（YOLO 沒有 results.png 時才用），
     # YOLO 的指標圖一律走 /api/metrics 的裁切路徑。
     base = BASE_URL.rsplit("/api", 1)[0]
@@ -330,7 +331,7 @@ def phase_metrics(sessions):
 
 
 def phase_inference(sessions):
-    section("階段 7／10：推論（含真實標註對照）")
+    section("階段 7／12：推論（含真實標註對照）")
     image_path, expected_class = find_labeled_image(LIBRARY_DIR)
     if not image_path:
         print("  LocalLibrary 內找不到帶標註的影像，略過類別對照")
@@ -357,7 +358,7 @@ def phase_inference(sessions):
 
 
 def phase_dataset_analysis(datasets):
-    section("階段 8／10：資料集分析（對照 ZIP 實際內容驗算）")
+    section("階段 8／12：資料集分析（對照 ZIP 實際內容驗算）")
     if not datasets:
         print("  沒有已載入的資料集，略過")
         return
@@ -389,7 +390,7 @@ def phase_dataset_analysis(datasets):
 
 
 def phase_export(sessions):
-    section("階段 9／10：模型格式匯出")
+    section("階段 9／12：模型格式匯出")
     caps = api("GET", "/export/capabilities")
     available = [f["format"] for f in caps.get("formats", []) if f.get("available")]
     print(f"  本環境可用格式：{available or '（無）'}")
@@ -479,8 +480,153 @@ def _verify_onnx(blob):
         os.unlink(tmp_path)
 
 
+def phase_evaluation(sessions, datasets):
+    section("階段 10／12：驗證評估（讓模型實跑資料集）")
+    if not sessions or not datasets:
+        print("  缺少模型或資料集，略過")
+        return []
+
+    targets = api("GET", "/evaluations/targets")
+    usable = [d for d in targets.get("datasets", []) if d.get("available")]
+    check("至少有一個資料集可供評估", bool(usable),
+          "；".join(d.get("reason") or "" for d in targets.get("datasets", [])) or "")
+
+    # 不可評估的項目仍必須列出並附原因，而不是被藏起來
+    for d in targets.get("datasets", []):
+        if not d.get("available"):
+            check(f"不可評估的資料集有附原因：{d['name']}", bool(d.get("reason")), d.get("reason", "")[:60])
+
+    if not usable:
+        return []
+
+    # 挑影像最多的資料集。取第一個會挑到最小的那份，而在一個只有十幾張影像的子集上
+    # 模型可能一個物件都沒偵測到——那時 mAP 為 0、逐類別列表為空，都是正確行為，
+    # 但這樣的評估無法驗證任何東西。
+    registered = api("GET", "/datasets").get("datasets", {})
+    def _image_count(d):
+        return (registered.get(d["dataset_id"], {}) or {}).get("total_images") or 0
+    usable.sort(key=_image_count, reverse=True)
+
+    dataset = usable[0]
+    print(f"  選用影像數最多的資料集：{dataset['name']}（{_image_count(dataset):,} 張）")
+    session_id = next(
+        (s["session_id"] for s in targets.get("sessions", []) if s.get("available")), None
+    )
+    check("至少有一個 YOLO 模型可供評估", session_id is not None)
+    if session_id is None:
+        return []
+
+    split = dataset.get("default_split")
+    check("預設 split 不是 train", split != "train", f"預設為 {split}")
+    print(f"  評估 {dataset['name']} / {split}（可能需要數分鐘）...")
+
+    started = time.monotonic()
+    submitted = api("POST", "/evaluations",
+                    data={"session_id": session_id, "dataset_id": dataset["dataset_id"], "split": split})
+    job_id = (submitted.get("job") or {}).get("job_id")
+    check("評估 job 已建立", bool(job_id), submitted.get("message", ""))
+    if not job_id:
+        return []
+
+    state, job = None, {}
+    for _ in range(600):
+        time.sleep(2)
+        job = (api("GET", f"/evaluations/{job_id}").get("job")) or {}
+        state = job.get("state")
+        if state in ("done", "failed"):
+            break
+    elapsed = time.monotonic() - started
+    check("評估完成", state == "done", f"state={state}, 耗時 {elapsed:.0f}s")
+    if state != "done":
+        print(f"    {job.get('message')}")
+        return []
+
+    overall = job.get("overall") or {}
+    print(f"  mAP50={overall.get('map50')}  mAP50-95={overall.get('map50_95')}  "
+          f"P={overall.get('precision')}  R={overall.get('recall')}")
+    # mAP 為 0 是合法結果（模型可能真的什麼都沒偵測到），所以下界是 0 而非大於 0。
+    # 真正該擋的是超出 [0,1] 的值——那代表指標抽取寫錯了。
+    # 注意不能寫 `overall.get("map50") or -1`：0.0 是 falsy，會被換成 -1 而誤判為失敗。
+    map50 = overall.get("map50")
+    check("mAP50 在 [0,1] 之內", map50 is not None and 0 <= map50 <= 1, str(map50))
+    check("mAP50 與 mAP50-95 的大小關係正確",
+          (overall.get("map50") or 0) >= (overall.get("map50_95") or 0),
+          f"{overall.get('map50')} >= {overall.get('map50_95')}")
+    check("類別詞彙比對有結果", (job.get("vocab_check") or {}).get("status") in ("match", "name_drift"),
+          (job.get("vocab_check") or {}).get("status", ""))
+    check("影像數與 split 相符", (job.get("image_count") or 0) > 0, str(job.get("image_count")))
+
+    per_class = job.get("per_class") or []
+    profile = {p["class_id"]: p for p in (job.get("size_profile") or [])}
+    # ultralytics 在完全沒有偵測結果時 ap_class_index 會是空的，因此逐類別列表可能為空。
+    # 只有在確實有偵測到東西（mAP > 0）時才要求逐類別指標存在。
+    if (overall.get("map50") or 0) > 0:
+        check("有逐類別指標", len(per_class) > 0, f"{len(per_class)} 類")
+    else:
+        print("  （此 split 沒有任何偵測結果，略過逐類別斷言）")
+    check("尺寸剖面涵蓋所有宣告的類別", len(profile) > 0, f"{len(profile)} 類")
+
+    print()
+    print(f"  {'類別':<20}{'AP@50':>8}{'框數':>8}{'中位框面積':>12}")
+    print("  " + "-" * 48)
+    for entry in sorted(per_class, key=lambda e: e["ap50"]):
+        size = profile.get(entry["class_id"], {})
+        area = size.get("median_area_pct")
+        print(f"  {entry['name']:<20}{entry['ap50']:>8.3f}{size.get('boxes', 0):>8}"
+              f"{(f'{area:.3f}%' if area is not None else '—'):>12}")
+
+    # 這是本功能的核心價值：同一個模型在不同 split 上的數字不同，
+    # 而訓練時記錄的舊值只對應其中一個
+    plots = job.get("plot_urls") or {}
+    check("產出了評估圖表", len(plots) > 0, "、".join(plots))
+    if plots:
+        key = next(iter(plots))
+        image = requests.get(f"{BASE_URL.rsplit('/api', 1)[0]}{plots[key]}", timeout=120)
+        check(f"圖表可下載：{key}", image.status_code == 200 and len(image.content) > 5000,
+              f"{image.status_code}, {len(image.content):,} bytes")
+
+    return [job_id]
+
+
+def phase_report(job_ids):
+    section("階段 11／12：成果報告")
+    if not job_ids:
+        print("  沒有可放進報告的評估結果，略過")
+        return
+
+    body = api("POST", "/reports", json={"job_ids": job_ids})
+    check("報告已產生", body.get("status") == "success", body.get("message", ""))
+    meta = body.get("report") or {}
+    if not meta:
+        return
+    print(f"  {meta.get('filename')} · {meta.get('size_kb')} KB")
+
+    base = BASE_URL.rsplit("/api", 1)[0]
+    res = requests.get(f"{base}/api/reports/{meta['report_id']}/view", timeout=120)
+    check("報告可開啟", res.status_code == 200, str(res.status_code))
+    html = res.text
+
+    external = re.findall(r'(?:src|href)="(?!data:)[^"]+"', html)
+    check("報告完全自足（無任何外部資源引用）", not external,
+          f"發現 {len(external)} 個外部引用" if external else "0 個")
+    check("圖表已內嵌", "data:image/" in html, f"{html.count('data:image/')} 張")
+    # 散點圖需要至少兩個「同時有 AP 與中位框面積」的類別，沒偵測到東西時不會畫——
+    # 那是正確行為，所以只在有逐類別資料時才要求。
+    has_per_class = "逐類別表現" in html and "AP@50" in html
+    if has_per_class and "<svg" not in html:
+        print("  （沒有足夠的逐類別資料可畫散點圖）")
+    check("報告主體結構完整", "逐類別表現" in html and "實測指標總覽" in html)
+    check("含列印樣式（供 Ctrl+P 轉 PDF）", "@media print" in html)
+    check("明確標示指標為重新計算", "重新計算" in html)
+    check("列出已知限制", "已知限制" in html)
+
+    listed = api("GET", "/reports")
+    check("報告出現在清單中",
+          any(r["report_id"] == meta["report_id"] for r in listed.get("reports", [])))
+
+
 def phase_deletion_safety(sessions, lib_before):
-    section("階段 10／10：刪除安全性與持久化契約")
+    section("階段 12／12：刪除安全性與持久化契約")
     if len(sessions) < 1:
         print("  沒有 session 可刪，略過")
         return
@@ -542,6 +688,8 @@ def main():
         phase_inference(sessions)
         phase_dataset_analysis(datasets)
         phase_export(sessions)
+        eval_jobs = phase_evaluation(sessions, datasets)
+        phase_report(eval_jobs)
         phase_deletion_safety(sessions, lib_before)
     except requests.RequestException as exc:
         print(f"\n[ERROR] 與後端通訊失敗：{exc}")

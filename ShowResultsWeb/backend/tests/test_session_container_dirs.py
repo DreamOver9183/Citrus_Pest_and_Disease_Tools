@@ -48,7 +48,7 @@ def _make_session(tmp_path, container: str, monkeypatch):
 
 @pytest.mark.parametrize(
     "container",
-    ["exports", "datasets", "weight", "images", "reports", "local_library"],
+    ["exports", "datasets", "weight", "images", "reports", "local_library", "evaluations"],
 )
 def test_delete_session_never_removes_container_dir(tmp_path, monkeypatch, container):
     container_dir, sentinel, leaf = _make_session(tmp_path, container, monkeypatch)
