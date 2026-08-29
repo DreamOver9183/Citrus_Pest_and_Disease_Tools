@@ -71,6 +71,19 @@ UPLOAD_TEMP_DIR = Path(os.environ.get("UPLOAD_TEMP_DIR", BACKEND_DIR / "temp")).
 # 系統同時允許載入的模型 Session 數量上限
 MAX_SESSIONS = int(os.environ.get("MAX_SESSIONS", "3"))
 
+# --- 權重登錄簿資料庫 ---
+# 雙軌：Docker 走 docker-compose.yml 注入的 PostgreSQL，本機開發與 CI 落回 SQLite 檔案。
+# 這裡刻意**不放進 _resolve_paths()**——它是連線字串而不是路徑；SQLite 的預設檔案落在
+# EXTRACTED_RUNS_DIR 底下，而該目錄已由 ensure_dirs() 建立，不需要新增建立項目。
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    f"sqlite:///{(EXTRACTED_RUNS_DIR / 'registry.db').as_posix()}",
+)
+# 啟動時建立資料表的重試次數與間隔（秒）。Postgres 容器在 healthcheck 通過後仍可能
+# 有極短的不可連線窗口，重試讓「單指令 build」不會因為競速而失敗。
+DB_CONNECT_RETRIES = int(os.environ.get("DB_CONNECT_RETRIES", "5"))
+DB_CONNECT_RETRY_DELAY = float(os.environ.get("DB_CONNECT_RETRY_DELAY", "2"))
+
 # --- 資料集分析 ---
 # 資料集分析只讀取 ZIP 內的文字檔（data.yaml / labels/*.txt / COCO json / VOC xml），
 # 不解壓縮任何影像，因此不需要額外的解壓目錄常數；以下純量僅用於防護與容量控制。
@@ -141,6 +154,9 @@ __all__ = [
     "EVAL_DIR",
     "UPLOAD_TEMP_DIR",
     "MAX_SESSIONS",
+    "DATABASE_URL",
+    "DB_CONNECT_RETRIES",
+    "DB_CONNECT_RETRY_DELAY",
     "MAX_DATASETS",
     "MAX_DATASET_ZIP_MB",
     "MAX_DATASET_MEMBERS",

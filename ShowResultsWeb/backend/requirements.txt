@@ -9,6 +9,11 @@ torchvision
 torchmetrics
 psutil
 
+# 權重登錄簿。雙軌設計：未設定 DATABASE_URL 時走 SQLite 檔案（本機開發、CI、pytest
+# 全部零設定），docker-compose.yml 則注入 PostgreSQL 連線字串。SQLAlchemy 兩邊都要，
+# 所以放在共用的 requirements.txt；Postgres driver 只有容器需要，見 requirements-docker.txt。
+sqlalchemy>=2.0,<3.0
+
 # 模型格式匯出（ONNX）。版本界線對齊 ultralytics exporter 的 check_requirements，
 # 避免它在執行期認為版本不符（YOLO_AUTOINSTALL 已關閉，不會自動補裝）。
 onnx>=1.12.0,<2.0.0

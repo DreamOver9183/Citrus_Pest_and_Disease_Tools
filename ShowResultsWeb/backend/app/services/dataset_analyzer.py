@@ -13,8 +13,9 @@
    因此 yaml 對不上時只產生一則資訊，永遠不影響計數。
 
 2. **所有 key 一律輸出。**
-   router 使用 response_model_exclude_unset=True，任何條件式省略的欄位會直接從
-   JSON 消失，在前端變成 undefined。因此即使無值也要顯式給 None / 0 / []。
+   即使無值也要顯式給 None / 0 / []，讓回應的形狀在任何輸入下都相同。
+   （這條原本是為了對抗 `response_model_exclude_unset=True` 會靜默裁掉未賦值欄位；
+   該選項已隨 API 信封正規化移除，但「形狀恆定」本身仍是前端最好處理的契約。）
 """
 import json
 import posixpath

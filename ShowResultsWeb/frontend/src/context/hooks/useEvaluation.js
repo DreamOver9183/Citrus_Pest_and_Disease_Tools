@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import axios from 'axios';
+import { apiGet, apiPost, apiDelete, errorMessage } from '../../api/client';
 
 // 驗證評估的「耐久」狀態，由 Provider 掛載一次。
 //
@@ -24,10 +24,8 @@ export const useEvaluation = () => {
   const fetchTargets = useCallback(async () => {
     setTargetsLoading(true);
     try {
-      const res = await axios.get('/api/evaluations/targets');
-      if (res.data.status === 'success') {
-        setTargets({ datasets: res.data.datasets || [], sessions: res.data.sessions || [] });
-      }
+      const data = await apiGet('/evaluations/targets');
+      setTargets({ datasets: data.datasets || [], sessions: data.sessions || [] });
     } catch (err) {
       console.error('[useEvaluation] Error fetching targets:', err);
     } finally {
@@ -37,12 +35,10 @@ export const useEvaluation = () => {
 
   const fetchJobs = useCallback(async () => {
     try {
-      const res = await axios.get('/api/evaluations');
-      if (res.data.status === 'success') {
-        const list = res.data.jobs || [];
-        setJobs(list);
-        activeRef.current = list.some((j) => j.state === 'queued' || j.state === 'running');
-      }
+      const data = await apiGet('/evaluations');
+      const list = data.jobs || [];
+      setJobs(list);
+      activeRef.current = list.some((j) => j.state === 'queued' || j.state === 'running');
     } catch (err) {
       console.error('[useEvaluation] Error fetching evaluations:', err);
     }
@@ -50,8 +46,8 @@ export const useEvaluation = () => {
 
   const fetchReports = useCallback(async () => {
     try {
-      const res = await axios.get('/api/reports');
-      if (res.data.status === 'success') setReports(res.data.reports || []);
+      const data = await apiGet('/reports');
+      setReports(data.reports || []);
     } catch (err) {
       console.error('[useEvaluation] Error fetching reports:', err);
     }
@@ -76,30 +72,26 @@ export const useEvaluation = () => {
     setIsSubmitting(true);
     setEvalError(null);
     try {
-      const form = new FormData();
-      form.append('session_id', sessionId);
-      form.append('dataset_id', datasetId);
-      if (split) form.append('split', split);
-
-      const res = await axios.post('/api/evaluations', form);
-      if (res.data.status === 'success') {
-        activeRef.current = true;
-        await fetchJobs();
-        return true;
-      }
-      setEvalError(res.data.message || '送出評估失敗');
+      await apiPost('/evaluations', {
+        session_id: sessionId,
+        dataset_id: datasetId,
+        split: split || null,
+      });
+      activeRef.current = true;
+      await fetchJobs();
+      return true;
     } catch (err) {
       console.error('[useEvaluation] Error submitting evaluation:', err);
-      setEvalError(err.response?.data?.detail || err.message || '連線後端 API 失敗');
+      setEvalError(errorMessage(err, '送出評估失敗'));
+      return false;
     } finally {
       setIsSubmitting(false);
     }
-    return false;
   };
 
   const deleteEvaluation = async (jobId) => {
     try {
-      await axios.post(`/api/evaluations/${jobId}/delete`);
+      await apiDelete(`/evaluations/${jobId}`);
       await fetchJobs();
       return true;
     } catch (err) {
@@ -113,24 +105,21 @@ export const useEvaluation = () => {
     setIsGeneratingReport(true);
     setEvalError(null);
     try {
-      const res = await axios.post('/api/reports', { job_ids: jobIds, title: title || null });
-      if (res.data.status === 'success') {
-        await fetchReports();
-        return res.data.report;
-      }
-      setEvalError(res.data.message || '報告產生失敗');
+      const data = await apiPost('/reports', { job_ids: jobIds, title: title || null });
+      await fetchReports();
+      return data.report;
     } catch (err) {
       console.error('[useEvaluation] Error generating report:', err);
-      setEvalError(err.response?.data?.detail || err.message || '連線後端 API 失敗');
+      setEvalError(errorMessage(err, '報告產生失敗'));
+      return null;
     } finally {
       setIsGeneratingReport(false);
     }
-    return null;
   };
 
   const deleteReport = async (reportId) => {
     try {
-      await axios.post(`/api/reports/${reportId}/delete`);
+      await apiDelete(`/reports/${reportId}`);
       await fetchReports();
       return true;
     } catch (err) {

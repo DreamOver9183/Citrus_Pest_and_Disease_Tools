@@ -6,14 +6,16 @@ import { useDatasetState } from './hooks/useDatasetState';
 import { useModelExport } from './hooks/useModelExport';
 import { useLocalLibrary } from './hooks/useLocalLibrary';
 import { useEvaluation } from './hooks/useEvaluation';
+import { useRegistry } from './hooks/useRegistry';
 
 const ExperimentContext = createContext();
 
-// 這個 Provider 是七個獨立 hook（session / device / live-demo / dataset / export /
-// local-library / evaluation 狀態）的組合層，
+// 這個 Provider 是八個獨立 hook（session / device / live-demo / dataset / export /
+// local-library / evaluation / registry 狀態）的組合層，
 // 目的是讓既有的 useExperiment() 呼叫點維持單一、扁平的 API，不必逐一遷移。
 export const ExperimentProvider = ({ children }) => {
-  const [activeTab, setActiveTab] = useState('init'); // 'init', 'metrics', 'demo', 'dataset', 'evaluate'
+  // 'init', 'metrics', 'demo', 'dataset', 'evaluate', 'registry'
+  const [activeTab, setActiveTab] = useState('init');
 
   const sessionsState = useSessions();
   const deviceState = useDeviceControl();
@@ -22,6 +24,7 @@ export const ExperimentProvider = ({ children }) => {
   const exportState = useModelExport();
   const localLibraryState = useLocalLibrary();
   const evaluationState = useEvaluation();
+  const registryState = useRegistry();
 
   // 載入回應同時帶回 sessions 與 datasets 兩份快照，分屬不同 hook——
   // 與 deleteSession 同樣的理由，跨 hook 的協調邏輯放在 Provider 層。
@@ -53,6 +56,7 @@ export const ExperimentProvider = ({ children }) => {
       ...exportState,
       ...localLibraryState,
       ...evaluationState,
+      ...registryState,
       deleteSession,
       registerLocalLibrarySelection,
       activeTab,

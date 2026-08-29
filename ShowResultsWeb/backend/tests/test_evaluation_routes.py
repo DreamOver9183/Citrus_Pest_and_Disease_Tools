@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
+from apitest import data, error
 from app.services import dataset_manager, evaluation_service as ev, report_service, session_manager
 
 
@@ -75,12 +76,27 @@ def _stub_run(monkeypatch, write_plot=False):
             target = val_dir / "confusion_matrix.png"
             target.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 200)
             plots["confusion_matrix"] = str(target).replace("\\", "/")
+        # 形狀必須與真實的 _run_validation 一致（含 f1/fitness 與 micro 區塊），
+        # 否則報告模板的新欄位在測試裡永遠不會被渲染到。
         return {
             "model_names": {0: "Aphid", 1: "Canker"},
-            "overall": {"map50": 0.8, "map50_95": 0.6, "precision": 0.75, "recall": 0.7},
+            "overall": {"map50": 0.8, "map50_95": 0.6, "precision": 0.75,
+                        "recall": 0.7, "f1": 0.7241, "fitness": 0.62},
+            "micro": {
+                "micro_accuracy": 0.5714, "micro_precision": 0.7273,
+                "micro_recall": 0.7273, "micro_f1": 0.7273,
+                "tp": 8, "fp": 3, "fn": 3,
+                "conf_threshold": 0.25, "iou_threshold": 0.45,
+                "per_class": [
+                    {"class_id": 0, "name": "Aphid", "tp": 5, "fp": 1, "fn": 1, "accuracy": .7143},
+                    {"class_id": 1, "name": "Canker", "tp": 3, "fp": 2, "fn": 2, "accuracy": .4286},
+                ],
+            },
             "per_class": [
-                {"class_id": 0, "name": "Aphid", "precision": .8, "recall": .7, "ap50": .85, "ap50_95": .6},
-                {"class_id": 1, "name": "Canker", "precision": .5, "recall": .3, "ap50": .32, "ap50_95": .2},
+                {"class_id": 0, "name": "Aphid", "precision": .8, "recall": .7,
+                 "ap50": .85, "ap50_95": .6, "accuracy": .7143},
+                {"class_id": 1, "name": "Canker", "precision": .5, "recall": .3,
+                 "ap50": .32, "ap50_95": .2, "accuracy": .4286},
             ],
             "speed_ms": {"inference": 42.0},
             "plots": plots,
@@ -92,8 +108,8 @@ def _stub_run(monkeypatch, write_plot=False):
 def _wait(client, job_id, timeout=15):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        body = client.get(f"/api/evaluations/{job_id}").json()
-        if body.get("job", {}).get("state") in ("done", "failed"):
+        body = data(client.get(f"/api/evaluations/{job_id}"))
+        if (body.get("job") or {}).get("state") in ("done", "failed"):
             return body["job"]
         time.sleep(0.05)
     raise AssertionError("評估未在時限內完成")
@@ -111,7 +127,7 @@ def test_targets_lists_unavailable_datasets_with_a_reason(client, tmp_path):
     _add_dataset(tmp_path, "ds_ok", container=True)
     _add_dataset(tmp_path, "ds_uploaded", container=False)
 
-    body = client.get("/api/evaluations/targets").json()
+    body = data(client.get("/api/evaluations/targets"))
     by_id = {d["dataset_id"]: d for d in body["datasets"]}
 
     assert by_id["ds_ok"]["available"] is True
@@ -124,7 +140,7 @@ def test_targets_marks_ssd_sessions_unavailable(client):
     _add_session("run_yolo", arch="yolo")
     _add_session("run_ssd", arch="ssdlite_mobilenet_v3_large")
 
-    body = client.get("/api/evaluations/targets").json()
+    body = data(client.get("/api/evaluations/targets"))
     by_id = {s["session_id"]: s for s in body["sessions"]}
 
     assert by_id["run_yolo"]["available"] is True
@@ -146,8 +162,7 @@ def test_submit_runs_and_returns_metrics(client, tmp_path, monkeypatch):
     _stub_run(monkeypatch)
     sid, did = _add_session(), _add_dataset(tmp_path)
 
-    body = client.post("/api/evaluations", data={"session_id": sid, "dataset_id": did}).json()
-    assert body["status"] == "success"
+    body = data(client.post("/api/evaluations", json={"session_id": sid, "dataset_id": did}))
 
     job = _wait(client, body["job"]["job_id"])
     assert job["state"] == "done"
@@ -159,32 +174,29 @@ def test_submit_runs_and_returns_metrics(client, tmp_path, monkeypatch):
 def test_submit_rejects_ssd_session(client, tmp_path):
     sid = _add_session("run_ssd", arch="ssdlite_mobilenet_v3_large")
     did = _add_dataset(tmp_path)
-    body = client.post("/api/evaluations", data={"session_id": sid, "dataset_id": did}).json()
-    assert body["status"] == "error"
-    assert "YOLO" in body["message"]
+    res = client.post("/api/evaluations", json={"session_id": sid, "dataset_id": did})
+    assert "YOLO" in error(res, status_code=422, code="precondition_failed")["message"]
 
 
 def test_submit_rejects_uploaded_zip_dataset(client, tmp_path):
     sid = _add_session()
     did = _add_dataset(tmp_path, "ds_uploaded", container=False)
-    body = client.post("/api/evaluations", data={"session_id": sid, "dataset_id": did}).json()
-    assert body["status"] == "error"
-    assert "上傳" in body["message"]
+    res = client.post("/api/evaluations", json={"session_id": sid, "dataset_id": did})
+    assert "上傳" in error(res, status_code=422, code="precondition_failed")["message"]
 
 
 def test_submit_rejects_unknown_split(client, tmp_path):
     sid, did = _add_session(), _add_dataset(tmp_path)
-    body = client.post(
-        "/api/evaluations", data={"session_id": sid, "dataset_id": did, "split": "holdout"}
-    ).json()
-    assert body["status"] == "error"
-    assert "holdout" in body["message"]
+    res = client.post(
+        "/api/evaluations", json={"session_id": sid, "dataset_id": did, "split": "holdout"}
+    )
+    assert "holdout" in error(res, status_code=422, code="precondition_failed")["message"]
 
 
 def test_submit_rejects_missing_ids(client, tmp_path):
     _add_dataset(tmp_path)
-    body = client.post("/api/evaluations", data={"session_id": "nope", "dataset_id": "ds_a"}).json()
-    assert body["status"] == "error"
+    res = client.post("/api/evaluations", json={"session_id": "nope", "dataset_id": "ds_a"})
+    error(res, status_code=404, code="not_found")
 
 
 # --- 圖表與刪除 ---------------------------------------------------------------
@@ -193,7 +205,7 @@ def test_plot_endpoint_serves_the_generated_image(client, tmp_path, monkeypatch)
     _stub_run(monkeypatch, write_plot=True)
 
     sid, did = _add_session(), _add_dataset(tmp_path)
-    body = client.post("/api/evaluations", data={"session_id": sid, "dataset_id": did}).json()
+    body = data(client.post("/api/evaluations", json={"session_id": sid, "dataset_id": did}))
     job = _wait(client, body["job"]["job_id"])
 
     assert "confusion_matrix" in job["plot_urls"]
@@ -205,12 +217,12 @@ def test_plot_endpoint_serves_the_generated_image(client, tmp_path, monkeypatch)
 def test_delete_evaluation(client, tmp_path, monkeypatch):
     _stub_run(monkeypatch)
     sid, did = _add_session(), _add_dataset(tmp_path)
-    body = client.post("/api/evaluations", data={"session_id": sid, "dataset_id": did}).json()
+    body = data(client.post("/api/evaluations", json={"session_id": sid, "dataset_id": did}))
     job_id = body["job"]["job_id"]
     _wait(client, job_id)
 
-    assert client.post(f"/api/evaluations/{job_id}/delete").json()["status"] == "success"
-    assert client.get(f"/api/evaluations/{job_id}").json()["status"] == "error"
+    data(client.delete(f"/api/evaluations/{job_id}"))
+    error(client.get(f"/api/evaluations/{job_id}"), status_code=404, code="not_found")
 
 
 # --- 報告 ---------------------------------------------------------------------
@@ -219,16 +231,14 @@ def _completed_job(client, tmp_path, monkeypatch, sid=None, did=None):
     _stub_run(monkeypatch)
     sid = sid or _add_session()
     did = did or _add_dataset(tmp_path)
-    body = client.post("/api/evaluations", data={"session_id": sid, "dataset_id": did}).json()
+    body = data(client.post("/api/evaluations", json={"session_id": sid, "dataset_id": did}))
     return _wait(client, body["job"]["job_id"])
 
 
 def test_report_generation_produces_a_self_contained_html(client, tmp_path, monkeypatch):
     job = _completed_job(client, tmp_path, monkeypatch)
 
-    body = client.post("/api/reports", json={"job_ids": [job["job_id"]]}).json()
-    assert body["status"] == "success"
-    meta = body["report"]
+    meta = data(client.post("/api/reports", json={"job_ids": [job["job_id"]]}))["report"]
     assert meta["filename"].endswith(".html")
     assert meta["size_kb"] > 0
 
@@ -236,6 +246,14 @@ def test_report_generation_produces_a_self_contained_html(client, tmp_path, monk
     assert "實測指標總覽" in html
     assert "Aphid" in html and "Canker" in html
     assert 'src="http' not in html, "報告不得引用外部資源，離線必須可讀"
+
+    # Micro-Accuracy 與其門檻前提必須一起出現——只給數字而不說明門檻，
+    # 讀者會直接拿它跟 mAP 比大小。
+    assert "Micro-Accuracy" in html
+    assert "0.5714" in html
+    assert "TP / (TP + FP + FN)" in html
+    assert "不可直接比較數值大小" in html
+    assert "IoU ≥ 0.45" in html
 
 
 def test_report_marks_multi_dataset_comparisons_as_incomparable(client, tmp_path, monkeypatch):
@@ -252,30 +270,32 @@ def test_report_marks_multi_dataset_comparisons_as_incomparable(client, tmp_path
     # 讓兩者的資料集名稱不同
     ev.EVAL_JOBS[job_b["job_id"]]["dataset_name"] = "another_dataset"
 
-    body = client.post("/api/reports", json={"job_ids": [job_a["job_id"], job_b["job_id"]]}).json()
+    body = data(client.post("/api/reports", json={"job_ids": [job_a["job_id"], job_b["job_id"]]}))
     html = client.get(f"/api/reports/{body['report']['report_id']}/view").text
     assert "不可直接互相比較" in html
 
 
 def test_report_rejects_empty_and_unfinished_selections(client, tmp_path, monkeypatch):
-    assert client.post("/api/reports", json={"job_ids": []}).json()["status"] == "error"
-    assert client.post("/api/reports", json={"job_ids": ["eval_nope"]}).json()["status"] == "error"
+    error(client.post("/api/reports", json={"job_ids": []}),
+          status_code=400, code="validation_error")
+    error(client.post("/api/reports", json={"job_ids": ["eval_nope"]}),
+          status_code=422, code="precondition_failed")
 
 
 def test_report_listing_and_deletion(client, tmp_path, monkeypatch):
     job = _completed_job(client, tmp_path, monkeypatch)
-    meta = client.post("/api/reports", json={"job_ids": [job["job_id"]]}).json()["report"]
+    meta = data(client.post("/api/reports", json={"job_ids": [job["job_id"]]}))["report"]
 
-    listed = client.get("/api/reports").json()
+    listed = data(client.get("/api/reports"))
     assert any(r["report_id"] == meta["report_id"] for r in listed["reports"])
 
-    assert client.post(f"/api/reports/{meta['report_id']}/delete").json()["status"] == "success"
-    assert client.get("/api/reports").json()["reports"] == []
+    data(client.delete(f"/api/reports/{meta['report_id']}"))
+    assert data(client.get("/api/reports"))["reports"] == []
 
 
 def test_report_download_is_an_attachment(client, tmp_path, monkeypatch):
     job = _completed_job(client, tmp_path, monkeypatch)
-    meta = client.post("/api/reports", json={"job_ids": [job["job_id"]]}).json()["report"]
+    meta = data(client.post("/api/reports", json={"job_ids": [job["job_id"]]}))["report"]
 
     res = client.get(f"/api/reports/{meta['report_id']}/download")
     assert res.status_code == 200

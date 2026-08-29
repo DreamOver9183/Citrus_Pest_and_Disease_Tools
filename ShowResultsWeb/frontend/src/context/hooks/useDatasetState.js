@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import axios from 'axios';
+import { apiGet, apiDelete, apiUpload, errorMessage } from '../../api/client';
 
 // 資料集分析的「耐久」狀態，由 Provider 掛載一次。
 //
@@ -20,10 +20,8 @@ export const useDatasetState = () => {
 
   const fetchDatasets = useCallback(async () => {
     try {
-      const res = await axios.get('/api/datasets');
-      if (res.data.status === 'success') {
-        setDatasets(res.data.datasets || {});
-      }
+      const data = await apiGet('/datasets');
+      setDatasets(data.datasets || {});
     } catch (err) {
       console.error('[useDatasetState] Error fetching datasets on mount:', err);
     } finally {
@@ -48,26 +46,19 @@ export const useDatasetState = () => {
     try {
       // 刻意不設 timeout：大型資料集分析可能耗時數十秒，axios 預設的 0（不逾時）
       // 才是正確行為。
-      const res = await axios.post('/api/upload-dataset', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      const data = await apiUpload('/upload-dataset', formData, {
         onUploadProgress: (evt) => {
           if (evt.total) {
             setUploadProgress(Math.round((evt.loaded * 100) / evt.total));
           }
         },
       });
-
-      if (res.data.status === 'success') {
-        setDatasets(res.data.datasets || {});
-        setActiveDatasetId(res.data.dataset_id);
-        return true;
-      }
-      setAnalysisError(res.data.message || '分析失敗');
+      setDatasets(data.datasets || {});
+      setActiveDatasetId(data.dataset_id);
+      return true;
     } catch (err) {
       console.error('[useDatasetState] Error analyzing dataset:', err);
-      setAnalysisError(
-        err.response?.data?.detail || err.message || '連線後端 API 失敗，請確認 FastAPI 服務是否運行'
-      );
+      setAnalysisError(errorMessage(err, '分析失敗'));
     } finally {
       inFlightRef.current = false;
       setIsAnalyzing(false);
@@ -78,19 +69,15 @@ export const useDatasetState = () => {
 
   const deleteDataset = async (datasetId) => {
     try {
-      const formData = new FormData();
-      formData.append('dataset_id', datasetId);
-      const res = await axios.post('/api/delete-dataset', formData);
-      if (res.data.status === 'success') {
-        const remaining = res.data.datasets || {};
-        setDatasets(remaining);
-        setActiveDatasetId((current) => (current === datasetId ? null : current));
-        return true;
-      }
+      const data = await apiDelete(`/datasets/${encodeURIComponent(datasetId)}`);
+      setDatasets(data.datasets || {});
+      setActiveDatasetId((current) => (current === datasetId ? null : current));
+      return true;
     } catch (err) {
       console.error('[useDatasetState] Error deleting dataset:', err);
+      setAnalysisError(errorMessage(err, '刪除失敗'));
+      return false;
     }
-    return false;
   };
 
   const datasetCount = Object.keys(datasets).length;

@@ -1,10 +1,10 @@
 import os
 import csv
-from typing import Union
 from fastapi import APIRouter
-from app.services.session_manager import ACTIVE_SESSIONS
+from app.services.session_manager import ACTIVE_SESSIONS, SESSIONS_LOCK
 from app.core.config import TEMP_DIR
-from app.schemas import MetricsResponse, ErrorResponse
+from app.core.envelope import ApiException, ApiResponse, ok
+from app.schemas import MetricsPayload
 from PIL import Image, ImageDraw, ImageFont
 
 router = APIRouter()
@@ -30,22 +30,22 @@ CHART_COLORS = {
     "ssd_mAP_50": "#A855F7"      # Purple
 }
 
-@router.get("/generate-chart", response_model=Union[MetricsResponse, ErrorResponse], response_model_exclude_unset=True)
+@router.get("/generate-chart", response_model=ApiResponse[MetricsPayload])
 def generate_chart(session_id: str, chart_type: str):
-    """
-    Generate training metric charts from CSV data using Pillow.
-    """
-    if session_id not in ACTIVE_SESSIONS:
-        return {"status": "error", "message": "無效的 Session ID。"}
-        
-    session_data = ACTIVE_SESSIONS[session_id]
+    """用 Pillow 手繪 SSD 的訓練曲線（YOLO 走 /api/metrics 的裁切路徑）。"""
+    with SESSIONS_LOCK:
+        session_data = ACTIVE_SESSIONS.get(session_id)
+        session_data = dict(session_data) if session_data else None
+
+    if session_data is None:
+        raise ApiException("not_found", "找不到指定的模型 Session")
+
     csv_path = session_data.get("metrics_csv_path")
-    
     if not csv_path or not os.path.exists(csv_path):
-        return {"status": "error", "message": f"該模型沒有找到訓練指標 CSV 記錄。"}
-        
+        raise ApiException("precondition_failed", "該模型沒有找到訓練指標 CSV 記錄。")
+
     if chart_type not in CHART_TITLES:
-        return {"status": "error", "message": f"未知的圖表類型: {chart_type}"}
+        raise ApiException("validation_error", f"未知的圖表類型: {chart_type}")
         
     # Read CSV
     epochs = []
@@ -63,10 +63,10 @@ def generate_chart(session_id: str, chart_type: str):
                 except (ValueError, KeyError):
                     continue
     except Exception as e:
-        return {"status": "error", "message": f"讀取 CSV 發生錯誤: {e}"}
+        raise ApiException("internal_error", f"讀取 CSV 發生錯誤: {e}")
         
     if not epochs or not values:
-        return {"status": "error", "message": "CSV 中沒有有效的數據。"}
+        raise ApiException("precondition_failed", "CSV 中沒有有效的數據。")
         
     # Draw chart with Pillow
     target_name = f"chart_{session_id}_{chart_type}.png"
@@ -164,11 +164,10 @@ def generate_chart(session_id: str, chart_type: str):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return {"status": "error", "message": f"繪製圖表失敗: {e}"}
+        raise ApiException("internal_error", f"繪製圖表失敗: {e}")
         
     source_path_clean = os.path.abspath(csv_path).replace('\\', '/')
-    return {
-        "status": "success",
+    return ok({
         "url": f"/static/{target_name}",
-        "source_path": f"{source_path_clean} (指標: {chart_type})"
-    }
+        "source_path": f"{source_path_clean} (指標: {chart_type})",
+    })

@@ -19,3 +19,7 @@
 litert-torch>=0.9.0
 ai-edge-litert>=2.1.4
 ai-edge-quantizer>=0.6.0
+
+# PostgreSQL driver。只有容器需要——本機開發與 CI 預設走 SQLite，不必背這個相依。
+# psycopg[binary] 自帶 libpq，因此映像檔不需要額外安裝 apt 套件。
+psycopg[binary]>=3.2

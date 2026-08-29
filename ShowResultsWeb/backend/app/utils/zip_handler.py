@@ -107,6 +107,8 @@ def peek_yolo_runs_in_zip(zip_path: str) -> list:
                     "optimizer": hyperparams.get("optimizer", "N/A"),
                     "model_cfg": hyperparams.get("model", ""),
                     "metrics_summary": metrics,
+                    # 完整 args.yaml，供權重登錄簿記錄（見 dir_handler 的同名欄位）
+                    "hyperparameters": hyperparams,
                 })
     except zipfile.BadZipFile:
         return []
@@ -147,6 +149,7 @@ def index_single_weight(file_path: str, dest_dir: str) -> dict:
         "optimizer": "N/A",
         "model_cfg": "N/A",
         "metrics_summary": {},
+        "hyperparameters": {},
         "results_png": None,
         "confusion_matrix": None
     }

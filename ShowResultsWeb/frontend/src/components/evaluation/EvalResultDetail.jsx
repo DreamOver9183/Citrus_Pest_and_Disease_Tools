@@ -68,11 +68,17 @@ const EvalResultDetail = ({ job, onOpenPlot }) => {
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <KPI label="mAP@50" value={formatMetric(job.overall?.map50)} accent="text-emerald-300" />
           <KPI label="mAP@50-95" value={formatMetric(job.overall?.map50_95)} />
           <KPI label="Precision" value={formatMetric(job.overall?.precision)} />
           <KPI label="Recall" value={formatMetric(job.overall?.recall)} />
+          <KPI label="F1" value={formatMetric(job.overall?.f1)} />
+          <KPI
+            label="Micro-Acc"
+            value={formatMetric(job.micro?.micro_accuracy)}
+            accent="text-cyan-300"
+          />
         </div>
 
         <p className="text-[9px] text-gray-500 leading-relaxed">
@@ -81,6 +87,20 @@ const EvalResultDetail = ({ job, onOpenPlot }) => {
             ? ` 單張推論約 ${job.speed_ms.inference.toFixed(1)} ms（CPU）。`
             : ''}
         </p>
+
+        {/* Micro-Accuracy 的門檻前提必須跟著數字一起出現：它是門檻相依的單點量測，
+            與對所有門檻積分的 mAP 不是同一類指標，放在一起而不說明會被誤讀。 */}
+        {job.micro?.micro_accuracy !== null && job.micro?.micro_accuracy !== undefined && (
+          <p className="text-[9px] text-cyan-300/70 leading-relaxed">
+            Micro-Accuracy（Jaccard index）= TP/(TP+FP+FN) ={' '}
+            {job.micro.tp.toLocaleString()}/({job.micro.tp.toLocaleString()}+
+            {job.micro.fp.toLocaleString()}+{job.micro.fn.toLocaleString()})，
+            於 conf ≥ {job.micro.conf_threshold} 且 IoU ≥ {job.micro.iou_threshold} 的固定門檻下統計
+            （微平均 P={formatMetric(job.micro.micro_precision)}、R=
+            {formatMetric(job.micro.micro_recall)}）。這是門檻相依的單點量測，
+            與對所有門檻積分的 mAP 不可直接並列解讀。
+          </p>
+        )}
       </div>
 
       {/* 逐類別 */}

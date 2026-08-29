@@ -8,6 +8,9 @@ const COLUMNS = [
   { key: 'ap50_95', label: 'AP@50-95' },
   { key: 'precision', label: 'Precision' },
   { key: 'recall', label: 'Recall' },
+  // 該類別自己的 Jaccard index。與左邊的 P/R 不同源：那兩個取自 PR 曲線的最佳 F1 點，
+  // 這個來自固定門檻（conf 0.25 / IoU 0.45）的混淆矩陣。
+  { key: 'accuracy', label: 'Accuracy' },
   { key: 'boxes', label: '標註框數' },
   { key: 'median_area_pct', label: '中位框面積' },
   { key: 'tiny_pct', label: '極小框佔比' },
@@ -91,6 +94,7 @@ const ClassBreakdownTable = ({ perClass, sizeProfile }) => {
                 <td className="py-2 px-2 text-right font-mono text-gray-300">{formatMetric(row.ap50_95)}</td>
                 <td className="py-2 px-2 text-right font-mono text-gray-400">{formatMetric(row.precision)}</td>
                 <td className="py-2 px-2 text-right font-mono text-gray-400">{formatMetric(row.recall)}</td>
+                <td className="py-2 px-2 text-right font-mono text-cyan-300/80">{formatMetric(row.accuracy)}</td>
                 <td className="py-2 px-2 text-right font-mono text-gray-400">
                   {row.boxes === null ? '—' : row.boxes.toLocaleString()}
                 </td>

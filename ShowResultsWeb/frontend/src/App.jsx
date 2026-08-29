@@ -5,7 +5,8 @@ import MetricDashboard from './components/MetricDashboard';
 import LiveDemo from './components/LiveDemo';
 import DatasetAnalyzer from './components/DatasetAnalyzer';
 import Evaluation from './components/Evaluation';
-import { Layers, Activity, BarChart2, Zap, Cpu, Database, Sparkles, Server, CheckCircle2, FolderTree, GaugeCircle } from 'lucide-react';
+import Registry from './components/Registry';
+import { Layers, Activity, BarChart2, Zap, Cpu, Database, Sparkles, Server, CheckCircle2, FolderTree, GaugeCircle, Library } from 'lucide-react';
 
 const AppContent = () => {
   const { activeTab, setActiveTab, isUnzipped, loading, sessionCount, currentDeviceLabel } = useExperiment();
@@ -168,6 +169,21 @@ const AppContent = () => {
                 <GaugeCircle className="w-3.5 h-3.5" />
                 驗證評估
               </button>
+
+              {/* 登錄簿刻意**不設 isUnzipped 閘門**：它記的是跨 session 的長期事實，
+                  一個模型都沒載入時仍然要能查得到歷史紀錄——那正是它存在的理由。 */}
+              <button
+                onClick={() => setActiveTab('registry')}
+                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
+                  activeTab === 'registry'
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/15'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5 cursor-pointer'
+                }`}
+                title="以權重雜湊為身分的長期帳本：訓練超參數與歷次實測指標"
+              >
+                <Library className="w-3.5 h-3.5" />
+                權重登錄簿
+              </button>
             </nav>
 
           </div>
@@ -180,6 +196,7 @@ const AppContent = () => {
           {activeTab === 'demo' && <LiveDemo />}
           {activeTab === 'dataset' && <DatasetAnalyzer />}
           {activeTab === 'evaluate' && <Evaluation />}
+          {activeTab === 'registry' && <Registry />}
         </main>
       </div>
 

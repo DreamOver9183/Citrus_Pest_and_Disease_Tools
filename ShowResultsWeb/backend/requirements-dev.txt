@@ -1,3 +1,7 @@
 -r requirements.txt
 pytest
 httpx  # fastapi.testclient 需要
+
+# CI 會另跑一輪把 DATABASE_URL 指向 Postgres service container 的測試，證明雙軌
+# 兩邊都成立。本機開發不需要它（預設走 SQLite），但裝著也不會有任何影響。
+psycopg[binary]>=3.2

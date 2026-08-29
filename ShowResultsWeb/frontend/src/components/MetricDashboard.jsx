@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { apiGet } from '../api/client';
 import { useExperiment } from '../context/ExperimentContext';
 import { Lock, ArrowUp, Zap } from 'lucide-react';
 import Lightbox from './Lightbox';
@@ -36,26 +36,19 @@ const MetricDashboard = () => {
         const isYolo = model.model_arch === 'yolo' || !model.model_arch;
         const isSsdMetric = metricKey.startsWith('ssd_');
 
-        let res;
         try {
+          let data;
           if (isYolo && !isSsdMetric) {
-            res = await axios.get(`/api/metrics?session_id=${id}&metric_type=${metricKey}`);
+            data = await apiGet(`/metrics?session_id=${id}&metric_type=${metricKey}`);
           } else if (!isYolo && isSsdMetric) {
-            res = await axios.get(`/api/generate-chart?session_id=${id}&chart_type=${metricKey}`);
+            data = await apiGet(`/generate-chart?session_id=${id}&chart_type=${metricKey}`);
           } else {
             urls[id] = null;
             return;
           }
-
-          if (res && res.data.status === 'success') {
-            urls[id] = {
-              url: res.data.url,
-              sourcePath: res.data.source_path
-            };
-          } else {
-            urls[id] = null;
-          }
+          urls[id] = { url: data.url, sourcePath: data.source_path };
         } catch (e) {
+          // 該模型沒有這張圖是常態（例如未產出 results.png），不是錯誤
           urls[id] = null;
         }
       }));
@@ -76,13 +69,10 @@ const MetricDashboard = () => {
 
     try {
       await Promise.all(sessionIds.map(async (id) => {
-        const res = await axios.get(`/api/metrics?session_id=${id}&metric_type=confusion_matrix`);
-        if (res.data.status === 'success') {
-          urls[id] = {
-            url: res.data.url,
-            sourcePath: res.data.source_path
-          };
-        } else {
+        try {
+          const data = await apiGet(`/metrics?session_id=${id}&metric_type=confusion_matrix`);
+          urls[id] = { url: data.url, sourcePath: data.source_path };
+        } catch (e) {
           urls[id] = null;
         }
       }));

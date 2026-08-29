@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 import main
 from app.services import export_capabilities, export_service
 from app.services.session_manager import ACTIVE_SESSIONS
+from apitest import data, error
 
 
 @pytest.fixture
@@ -43,35 +44,26 @@ def _register_session(tmp_path, session_id="run_abc12345", arch="yolo", weights=
 # --- 路由順序（本檔存在的主因）---------------------------------------------
 
 def test_capabilities_route_is_not_shadowed_by_job_id(client):
-    res = client.get("/api/export/capabilities")
-    assert res.status_code == 200
-    body = res.json()
-    assert body["status"] == "success"
+    body = data(client.get("/api/export/capabilities"))
     assert "formats" in body
     assert {f["format"] for f in body["formats"]} == {"onnx", "litert"}
 
 
 def test_jobs_route_is_not_shadowed_by_job_id(client):
-    res = client.get("/api/export/jobs")
-    assert res.status_code == 200
-    assert res.json()["jobs"] == {}
+    assert data(client.get("/api/export/jobs"))["jobs"] == {}
 
 
 # --- 提交閘 -----------------------------------------------------------------
 
 def test_unknown_session_returns_error_not_500(client):
-    res = client.post("/api/export", data={"session_id": "nope", "format": "onnx"})
-    assert res.status_code == 200
-    assert res.json()["status"] == "error"
+    res = client.post("/api/export", json={"session_id": "nope", "format": "onnx"})
+    error(res, status_code=404, code="not_found")
 
 
 def test_ssdlite_session_is_refused_without_enqueueing(client, tmp_path):
     sid = _register_session(tmp_path, arch="ssdlite_mobilenet_v3_large")
-    res = client.post("/api/export", data={"session_id": sid, "format": "onnx"})
-    assert res.status_code == 200
-    body = res.json()
-    assert body["status"] == "error"
-    assert "YOLO" in body["message"]
+    res = client.post("/api/export", json={"session_id": sid, "format": "onnx"})
+    assert "YOLO" in error(res, status_code=422, code="precondition_failed")["message"]
     assert export_service.EXPORT_JOBS == {}, "不符資格的請求不該建立 job"
 
 
@@ -81,19 +73,15 @@ def test_unavailable_format_is_refused(client, tmp_path, monkeypatch):
     monkeypatch.setattr(export_capabilities.platform, "machine", lambda: "AMD64")
     export_capabilities.refresh()
 
-    res = client.post("/api/export", data={"session_id": sid, "format": "litert"})
-    assert res.status_code == 200
-    body = res.json()
-    assert body["status"] == "error"
-    assert "Docker" in body["message"]
+    res = client.post("/api/export", json={"session_id": sid, "format": "litert"})
+    assert "Docker" in error(res, status_code=422, code="precondition_failed")["message"]
     assert export_service.EXPORT_JOBS == {}
 
 
 def test_unknown_format_is_refused(client, tmp_path):
     sid = _register_session(tmp_path)
-    res = client.post("/api/export", data={"session_id": sid, "format": "coreml"})
-    assert res.status_code == 200
-    assert res.json()["status"] == "error"
+    res = client.post("/api/export", json={"session_id": sid, "format": "coreml"})
+    error(res, status_code=422, code="precondition_failed")
 
 
 # --- 成功流程與下載 ---------------------------------------------------------
@@ -109,15 +97,11 @@ def test_submit_then_poll_then_download(client, tmp_path, monkeypatch):
     monkeypatch.setattr(export_service, "_run_export", fake_run)
     sid = _register_session(tmp_path)
 
-    res = client.post("/api/export", data={"session_id": sid, "format": "onnx"})
-    assert res.status_code == 200
-    job_id = res.json()["job"]["job_id"]
+    job_id = data(client.post("/api/export", json={"session_id": sid, "format": "onnx"}))["job"]["job_id"]
 
     assert export_service.wait_for_job(job_id, timeout=15)
 
-    status = client.get(f"/api/export/{job_id}")
-    assert status.status_code == 200
-    job = status.json()["job"]
+    job = data(client.get(f"/api/export/{job_id}"))["job"]
     assert job["state"] == "done"
     assert job["download_url"] == f"/api/export/{job_id}/download"
 
@@ -129,15 +113,15 @@ def test_submit_then_poll_then_download(client, tmp_path, monkeypatch):
 
 
 def test_download_unknown_job_returns_404(client):
-    assert client.get("/api/export/exp_missing/download").status_code == 404
+    error(client.get("/api/export/exp_missing/download"), status_code=404, code="not_found")
 
 
 def test_get_unknown_job_returns_404(client):
-    assert client.get("/api/export/exp_missing").status_code == 404
+    error(client.get("/api/export/exp_missing"), status_code=404, code="not_found")
 
 
 def test_delete_unknown_job_returns_404(client):
-    assert client.post("/api/export/exp_missing/delete").status_code == 404
+    error(client.delete("/api/export/exp_missing"), status_code=404, code="not_found")
 
 
 def test_jobs_filter_by_session_and_active(client, tmp_path, monkeypatch):
@@ -145,14 +129,13 @@ def test_jobs_filter_by_session_and_active(client, tmp_path, monkeypatch):
     monkeypatch.setattr(export_service, "_run_export",
                         lambda job_dir, src, fmt: _mk(Path(job_dir) / "a.onnx"))
     sid = _register_session(tmp_path)
-    res = client.post("/api/export", data={"session_id": sid, "format": "onnx"})
-    job_id = res.json()["job"]["job_id"]
+    job_id = data(client.post("/api/export", json={"session_id": sid, "format": "onnx"}))["job"]["job_id"]
     export_service.wait_for_job(job_id, timeout=15)
 
-    assert job_id in client.get(f"/api/export/jobs?session_id={sid}").json()["jobs"]
-    assert client.get("/api/export/jobs?session_id=run_other").json()["jobs"] == {}
+    assert job_id in data(client.get(f"/api/export/jobs?session_id={sid}"))["jobs"]
+    assert data(client.get("/api/export/jobs?session_id=run_other"))["jobs"] == {}
     # 已完成的 job 不算 active
-    assert client.get("/api/export/jobs?active=1").json()["jobs"] == {}
+    assert data(client.get("/api/export/jobs?active=1"))["jobs"] == {}
 
 
 def _mk(path):

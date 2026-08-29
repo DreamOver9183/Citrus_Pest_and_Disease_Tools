@@ -2,8 +2,8 @@
 端到端測試：以 LocalLibrary 內的真實檔案驗證整個系統。
 
 與 e2e_test.py 的差異：那支是早期的上傳流程煙霧測試，需要一份特定佈局的 assets
-資料夾。這支改用**使用者本機資料夾裡實際存在的內容**，並涵蓋後來新增的資料集分析、
-模型匯出與本機資料夾掃描三個子系統。
+資料夾。這支改用**使用者本機資料夾裡實際存在的內容**，涵蓋資料集分析、模型匯出、
+本機資料夾掃描、驗證評估與成果報告，以及權重登錄簿（資料庫）與 API 信封契約。
 
 執行方式（後端需已在跑，Docker 或本機皆可）：
 
@@ -60,11 +60,76 @@ def check(label, condition, detail=""):
     return bool(condition)
 
 
-def api(method, path, **kwargs):
+ENVELOPE_KEYS = {"status", "data", "error", "meta"}
+
+
+def raw(method, path, **kwargs):
+    """不拆信封的原始呼叫，用於驗證 HTTP 狀態碼與錯誤形狀。"""
     kwargs.setdefault("timeout", 600)
-    res = requests.request(method, f"{BASE_URL}{path}", **kwargs)
+    return requests.request(method, f"{BASE_URL}{path}", **kwargs)
+
+
+def api(method, path, **kwargs):
+    """成功呼叫，回傳信封裡的 data。
+
+    順帶驗證信封形狀——於是整支 E2E 的每一次呼叫都在檢查 API 契約，
+    而不是只靠專門的那一個階段。
+    """
+    res = raw(method, path, **kwargs)
     res.raise_for_status()
-    return res.json()
+    body = res.json()
+    assert set(body) == ENVELOPE_KEYS, f"{path} 回應不是標準信封：{sorted(body)}"
+    assert body["status"] == "success", f"{path} 回報失敗：{body}"
+    return body["data"]
+
+
+def api_meta(method, path, **kwargs):
+    res = raw(method, path, **kwargs)
+    res.raise_for_status()
+    return res.json().get("meta") or {}
+
+
+def sha256_of(path):
+    """E2E 自己算一次權重雜湊，作為登錄簿身分的獨立對照答案。"""
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def parse_args_yaml(path):
+    """最小的 args.yaml 解析（只取頂層純量），用於獨立驗算登錄簿存的超參數。
+
+    刻意不引入 PyYAML：E2E 是外部觀察者，用越少與被測系統相同的程式碼越好。
+    """
+    values = {}
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            if not line.strip() or line.startswith(("#", " ", "	", "-")):
+                continue
+            if ":" not in line:
+                continue
+            key, _, rest = line.partition(":")
+            token = rest.split("#")[0].strip()
+            if token in ("", "null", "~"):
+                values[key.strip()] = None
+                continue
+            if token in ("true", "false"):
+                values[key.strip()] = token == "true"
+                continue
+            try:
+                values[key.strip()] = int(token)
+                continue
+            except ValueError:
+                pass
+            try:
+                values[key.strip()] = float(token)
+                continue
+            except ValueError:
+                pass
+            values[key.strip()] = token.strip("'\"")
+    return values
 
 
 def tree_fingerprint(root):
@@ -103,6 +168,81 @@ def count_yolo_zip(zip_path):
                     text = f.read().decode("utf-8", errors="replace")
                 boxes += sum(1 for line in text.splitlines() if line.strip())
     return images, labels, boxes
+
+
+def count_boxes_per_split(library_dir):
+    """數出 LocalLibrary 內每個資料集各 split 的標註框總數。
+
+    回傳 {(資料集名稱, split): 框數}。這是 phase_registry_metrics 那條硬不變量的
+    對照答案來源：混淆矩陣的每個 GT 框必定落在其真實類別那一欄的某一格，因此
+    TP + FN（對真實類別加總）必定等於該 split 的 GT 框總數。
+
+    **每個標註檔內重複的列只算一次。** ultralytics 在載入標註時會做
+    `np.unique(lb, axis=0)`，完全相同的框只會保留一份，因此它實際處理的 GT 數是
+    去重後的數量。本專案的 v5 資料集就有一個檔案（test_0175.txt）含 4 列但只有 2 列
+    相異——照原始行數數會多出 2，讓這條正確的不變量看起來像是失敗。
+
+    ZIP 與資料夾兩種形態都要處理——LocalLibrary 允許使用者用任一種方式放資料集。
+    """
+    totals = {}
+
+    def bump(name, split, count):
+        if count:
+            totals[(name, split)] = totals.get((name, split), 0) + count
+
+    def split_of(parts):
+        """從路徑片段裡找出 split 名稱：labels/ 的上一層就是 split。"""
+        for idx, part in enumerate(parts):
+            if part == "labels" and idx > 0:
+                return parts[idx - 1]
+        return None
+
+    # --- ZIP 形態 ---
+    for filename in os.listdir(library_dir):
+        if not filename.lower().endswith(".zip"):
+            continue
+        path = os.path.join(library_dir, filename)
+        try:
+            with zipfile.ZipFile(path) as zf:
+                for info in zf.infolist():
+                    if info.is_dir() or not info.filename.lower().endswith(".txt"):
+                        continue
+                    parts = info.filename.split("/")
+                    if parts[-1] == "classes.txt":
+                        continue
+                    split = split_of(parts)
+                    if not split:
+                        continue
+                    with zf.open(info) as f:
+                        text = f.read().decode("utf-8", errors="replace")
+                    rows = [ln.strip() for ln in text.splitlines() if ln.strip()]
+                    bump(filename, split, len(set(rows)))
+        except (zipfile.BadZipFile, OSError):
+            continue
+
+    # --- 資料夾形態 ---
+    for entry in os.listdir(library_dir):
+        root = os.path.join(library_dir, entry)
+        if not os.path.isdir(root):
+            continue
+        for dirpath, _dirnames, filenames in os.walk(root):
+            if os.path.basename(dirpath) != "labels":
+                continue
+            split = os.path.basename(os.path.dirname(dirpath))
+            count = 0
+            for name in filenames:
+                if not name.lower().endswith(".txt") or name == "classes.txt":
+                    continue
+                try:
+                    with open(os.path.join(dirpath, name), "r", encoding="utf-8",
+                              errors="replace") as f:
+                        rows = [ln.strip() for ln in f if ln.strip()]
+                    count += len(set(rows))
+                except OSError:
+                    continue
+            bump(entry, split, count)
+
+    return totals
 
 
 def find_labeled_image(library_dir):
@@ -181,32 +321,46 @@ def _parse_names(yaml_path):
 # ------------------------------------------------------------------- 測試階段
 
 def phase_preflight():
-    section("階段 1／12：連線與環境")
+    section("階段 1／16：連線與環境")
     devices = api("GET", "/devices")
-    check("後端可連線且回報裝置清單", devices.get("status") == "success",
+    check("後端可連線且回報裝置清單", bool(devices.get("available_devices")),
           f"目前裝置 {devices.get('current_device')}")
 
     info = api("GET", "/local-library")
-    check("本機資料夾端點回報路徑", info.get("status") == "success" and info.get("exists"),
-          info.get("path"))
+    check("本機資料夾端點回報路徑", bool(info.get("exists")), info.get("path"))
+
+    # --- API 契約：成功與失敗必須長成同一個信封，錯誤必須用真正的狀態碼 ---
+    ok_body = raw("GET", "/sessions").json()
+    check("成功回應是標準信封", set(ok_body) == ENVELOPE_KEYS, str(sorted(ok_body)))
+    check("成功回應的 error 為 None", ok_body["error"] is None)
+
+    missing = raw("GET", "/evaluations/definitely-not-a-real-job")
+    body = missing.json()
+    check("找不到資源回 404 而不是 200", missing.status_code == 404, str(missing.status_code))
+    check("錯誤回應是同一個信封", set(body) == ENVELOPE_KEYS, str(sorted(body)))
+    check("錯誤帶結構化的 code", (body.get("error") or {}).get("code") == "not_found",
+          str((body.get("error") or {}).get("code")))
+
+    bad = raw("POST", "/evaluations", json={"session_id": "x"})
+    check("請求欄位不合法回 400", bad.status_code == 400, str(bad.status_code))
+    check("驗證錯誤指出是哪個欄位",
+          bool(((bad.json().get("error") or {}).get("details") or {}).get("fields")))
     return info["path"]
 
 
 def phase_reset():
-    section("階段 2／12：清空既有狀態")
-    sessions = api("GET", "/sessions").get("sessions", {})
-    for sid in list(sessions):
-        requests.post(f"{BASE_URL}/delete-session", data={"session_id": sid}, timeout=120)
-    datasets = api("GET", "/datasets").get("datasets", {})
-    for did in list(datasets):
-        requests.post(f"{BASE_URL}/delete-dataset", data={"dataset_id": did}, timeout=120)
+    section("階段 2／16：清空既有狀態")
+    for sid in list(api("GET", "/sessions").get("sessions", {})):
+        raw("DELETE", f"/sessions/{sid}", timeout=120)
+    for did in list(api("GET", "/datasets").get("datasets", {})):
+        raw("DELETE", f"/datasets/{did}", timeout=120)
 
     check("sessions 已清空", len(api("GET", "/sessions").get("sessions", {})) == 0)
     check("datasets 已清空", len(api("GET", "/datasets").get("datasets", {})) == 0)
 
 
 def phase_discovery():
-    section("階段 3／12：掃描（探索階段必須是唯讀的）")
+    section("階段 3／16：掃描（探索階段必須是唯讀的）")
     started = time.monotonic()
     scan = api("POST", "/local-library/scan")
     elapsed = time.monotonic() - started
@@ -241,7 +395,7 @@ def phase_discovery():
 
 
 def phase_register(candidates):
-    section("階段 4／12：勾選式載入（只載入選取的項目）")
+    section("階段 4／16：勾選式載入（只載入選取的項目）")
     by_kind = {}
     for c in candidates:
         by_kind.setdefault(c["source_kind"], []).append(c)
@@ -293,7 +447,7 @@ def phase_register(candidates):
 
 
 def phase_readonly(before):
-    section("階段 5／12：使用者檔案唯讀保證")
+    section("階段 5／16：使用者檔案唯讀保證")
     after = tree_fingerprint(LIBRARY_DIR)
     check("LocalLibrary 檔案數未變", before[0] == after[0], f"{before[0]} → {after[0]}")
     check("LocalLibrary 內容指紋未變（大小與 mtime 皆未動）",
@@ -301,7 +455,7 @@ def phase_readonly(before):
 
 
 def phase_metrics(sessions):
-    section("階段 6／12：指標與圖表")
+    section("階段 6／16：指標與圖表")
     # 注意 /api/generate-chart 是 SSD 專用的手繪曲線端點（YOLO 沒有 results.png 時才用），
     # YOLO 的指標圖一律走 /api/metrics 的裁切路徑。
     base = BASE_URL.rsplit("/api", 1)[0]
@@ -312,11 +466,13 @@ def phase_metrics(sessions):
         name = s.get("custom_name")
 
         for metric_type in ("confusion_matrix", "mAP50", "precision"):
-            metrics = api("GET", "/metrics",
-                          params={"session_id": sid, "metric_type": metric_type})
-            url = metrics.get("url")
-            ok = metrics.get("status") == "success" and url
-            check(f"指標圖已產生：{metric_type}", ok, url or metrics.get("message", ""))
+            res = raw("GET", "/metrics",
+                      params={"session_id": sid, "metric_type": metric_type})
+            body = res.json()
+            url = (body.get("data") or {}).get("url")
+            ok = res.status_code == 200 and bool(url)
+            check(f"指標圖已產生：{metric_type}", ok,
+                  url or (body.get("error") or {}).get("message", ""))
             if not ok:
                 continue
             image = requests.get(f"{base}{url}", timeout=120)
@@ -331,7 +487,7 @@ def phase_metrics(sessions):
 
 
 def phase_inference(sessions):
-    section("階段 7／12：推論（含真實標註對照）")
+    section("階段 7／16：推論（含真實標註對照）")
     image_path, expected_class = find_labeled_image(LIBRARY_DIR)
     if not image_path:
         print("  LocalLibrary 內找不到帶標註的影像，略過類別對照")
@@ -342,23 +498,24 @@ def phase_inference(sessions):
     for sid, s in sessions.items():
         with open(image_path, "rb") as f:
             res = requests.post(f"{BASE_URL}/inference",
-                                params={"session_id": sid, "conf": 0.25},
+                                data={"session_id": sid, "conf": 0.25},
                                 files={"file": f}, timeout=600)
-        data = res.json()
+        body = res.json()
+        payload = body.get("data") or {}
         source = "ZIP 解壓" if "local_library" in s["weights_path"] else "就地引用"
-        ok = res.status_code == 200 and data.get("status") == "success"
+        ok = res.status_code == 200 and body.get("status") == "success"
         check(f"推論成功（{source}）：{s.get('custom_name')}", ok,
-              f"{data.get('device_used')}, counts={data.get('counts')}, "
-              f"{json.dumps(data.get('detections'), ensure_ascii=False)}")
+              f"{payload.get('device_used')}, counts={payload.get('counts')}, "
+              f"{json.dumps(payload.get('detections'), ensure_ascii=False)}")
 
-        if ok and expected_class and data.get("counts"):
+        if ok and expected_class and payload.get("counts"):
             check(f"偵測類別與真實標註相符（{source}）",
-                  expected_class in data.get("detections", {}),
-                  f"期望 {expected_class}，得到 {list(data.get('detections', {}))}")
+                  expected_class in payload.get("detections", {}),
+                  f"期望 {expected_class}，得到 {list(payload.get('detections', {}))}")
 
 
 def phase_dataset_analysis(datasets):
-    section("階段 8／12：資料集分析（對照 ZIP 實際內容驗算）")
+    section("階段 8／16：資料集分析（對照 ZIP 實際內容驗算）")
     if not datasets:
         print("  沒有已載入的資料集，略過")
         return
@@ -390,7 +547,7 @@ def phase_dataset_analysis(datasets):
 
 
 def phase_export(sessions):
-    section("階段 9／12：模型格式匯出")
+    section("階段 9／16：模型格式匯出")
     caps = api("GET", "/export/capabilities")
     available = [f["format"] for f in caps.get("formats", []) if f.get("available")]
     print(f"  本環境可用格式：{available or '（無）'}")
@@ -409,7 +566,7 @@ def phase_export(sessions):
             continue
         started = time.monotonic()
         # 回應把 job 包在 "job" 底下，不是攤平在頂層
-        submitted = api("POST", "/export", data={"session_id": target, "format": fmt})
+        submitted = api("POST", "/export", json={"session_id": target, "format": fmt})
         job = submitted.get("job") or {}
         job_id = job.get("job_id")
         check(f"{fmt.upper()} 匯出 job 已建立", bool(job_id),
@@ -421,8 +578,7 @@ def phase_export(sessions):
         status = {}
         for _ in range(240):
             time.sleep(2)
-            polled = api("GET", f"/export/{job_id}")
-            status = polled.get("job") or polled
+            status = api("GET", f"/export/{job_id}").get("job") or {}
             state = status.get("state")
             if state in ("done", "failed"):
                 break
@@ -481,7 +637,7 @@ def _verify_onnx(blob):
 
 
 def phase_evaluation(sessions, datasets):
-    section("階段 10／12：驗證評估（讓模型實跑資料集）")
+    section("階段 10／16：驗證評估（讓模型實跑資料集）")
     if not sessions or not datasets:
         print("  缺少模型或資料集，略過")
         return []
@@ -522,7 +678,8 @@ def phase_evaluation(sessions, datasets):
 
     started = time.monotonic()
     submitted = api("POST", "/evaluations",
-                    data={"session_id": session_id, "dataset_id": dataset["dataset_id"], "split": split})
+                    json={"session_id": session_id, "dataset_id": dataset["dataset_id"],
+                          "split": split})
     job_id = (submitted.get("job") or {}).get("job_id")
     check("評估 job 已建立", bool(job_id), submitted.get("message", ""))
     if not job_id:
@@ -531,7 +688,7 @@ def phase_evaluation(sessions, datasets):
     state, job = None, {}
     for _ in range(600):
         time.sleep(2)
-        job = (api("GET", f"/evaluations/{job_id}").get("job")) or {}
+        job = api("GET", f"/evaluations/{job_id}").get("job") or {}
         state = job.get("state")
         if state in ("done", "failed"):
             break
@@ -589,14 +746,14 @@ def phase_evaluation(sessions, datasets):
 
 
 def phase_report(job_ids):
-    section("階段 11／12：成果報告")
+    section("階段 11／16：成果報告")
     if not job_ids:
         print("  沒有可放進報告的評估結果，略過")
         return
 
     body = api("POST", "/reports", json={"job_ids": job_ids})
-    check("報告已產生", body.get("status") == "success", body.get("message", ""))
     meta = body.get("report") or {}
+    check("報告已產生", bool(meta), body.get("message", ""))
     if not meta:
         return
     print(f"  {meta.get('filename')} · {meta.get('size_kb')} KB")
@@ -625,8 +782,201 @@ def phase_report(job_ids):
           any(r["report_id"] == meta["report_id"] for r in listed.get("reports", [])))
 
 
+def phase_registry_weights(sessions):
+    """權重登錄簿：註冊時是否確實入帳，且身分正確。
+
+    所有斷言都對照 **E2E 自己算出來的事實**：SHA-256 自己雜湊一次，超參數自己 parse
+    一次 args.yaml。不是拿後端的一個欄位去比對後端的另一個欄位。
+    """
+    section("階段 13／16：權重登錄簿（身分與超參數）")
+
+    stats = api("GET", "/registry/stats")
+    if not stats.get("available"):
+        print(f"  登錄簿資料庫離線（{stats.get('backend')}），略過本階段")
+        return {}
+    print(f"  資料庫引擎：{stats.get('backend')}")
+
+    listed = api("GET", "/registry/weights?limit=200")
+    by_sha = {w["sha256"]: w for w in listed.get("weights", [])}
+    check("登錄簿有回傳權重清單", len(by_sha) > 0, f"{len(by_sha)} 筆")
+
+    total = api_meta("GET", "/registry/weights?limit=200").get("total")
+    check("meta 回報的總數與清單一致", total == len(by_sha), f"meta={total}, 清單={len(by_sha)}")
+
+    recorded = {}
+    skipped_paths = 0
+    for sid, sess in sessions.items():
+        weights_path = sess.get("weights_path")
+        if not weights_path or not os.path.exists(weights_path):
+            # 對 Docker 後端執行時，API 回的是容器內路徑（/app/LocalLibrary/...），
+            # 主機端的測試腳本開不了它，也就無法自行算雜湊對答案。誠實跳過並說明，
+            # 不要假裝驗證過。
+            skipped_paths += 1
+            continue
+
+        expected_sha = sha256_of(weights_path)
+        check(f"權重已入帳且雜湊相符：{sess.get('custom_name')}",
+              expected_sha in by_sha, f"{expected_sha[:12]}...")
+        if expected_sha not in by_sha:
+            continue
+        recorded[sid] = expected_sha
+
+        check(f"session 帶回登錄簿身分：{sess.get('custom_name')}",
+              sess.get("weight_sha256") == expected_sha,
+              f"session 說 {str(sess.get('weight_sha256'))[:12]}...")
+
+        detail = api("GET", f"/registry/weights/{expected_sha}")
+        run = detail.get("training_run")
+
+        # 用 E2E 自己 parse 的 args.yaml 對答案
+        args_path = os.path.join(os.path.dirname(os.path.dirname(weights_path)), "args.yaml")
+        if not os.path.exists(args_path):
+            args_path = os.path.join(os.path.dirname(weights_path), "args.yaml")
+        if os.path.exists(args_path) and run:
+            expected_args = parse_args_yaml(args_path)
+            stored = run.get("hyperparameters") or {}
+            mismatched = [k for k, v in expected_args.items() if k in stored and stored[k] != v]
+            check(f"完整超參數與 args.yaml 相符：{sess.get('custom_name')}",
+                  not mismatched and len(stored) >= len(expected_args) * 0.9,
+                  f"存了 {len(stored)} 項 / 檔案 {len(expected_args)} 項"
+                  + (f"，不符：{mismatched[:3]}" if mismatched else ""))
+            check("超參數不只保留 epochs/optimizer/model 三項（原缺陷的直接回歸）",
+                  len(stored) > 3, f"{len(stored)} 項")
+            if "epochs" in expected_args:
+                check("提升為欄位的 epochs 與 JSON 內容一致",
+                      run.get("epochs") == expected_args["epochs"],
+                      f"{run.get('epochs')} vs {expected_args['epochs']}")
+
+    if skipped_paths:
+        print(f"  （{skipped_paths} 個權重的路徑在主機端無法存取，略過雜湊對照——"
+              f"對 Docker 後端執行時屬正常，API 回的是容器內路徑）")
+
+    # 冪等：同一顆權重重複註冊不得產生第二列
+    before = len(api("GET", "/registry/weights?limit=200").get("weights", []))
+    rescan = api("POST", "/local-library/scan")
+    ids = [c["candidate_id"] for c in rescan.get("candidates", []) if c.get("already_registered")]
+    if ids:
+        api("POST", "/local-library/register", json={"candidate_ids": ids})
+    after = len(api("GET", "/registry/weights?limit=200").get("weights", []))
+    check("重複註冊同一顆權重不會產生第二列（身分是內容雜湊，不是 session_id）",
+          before == after, f"{before} -> {after}")
+
+    return recorded
+
+
+def phase_registry_metrics(job_ids, dataset_totals):
+    """指標入帳與交叉驗算。
+
+    最重要的一項是 micro_tp + micro_fn 必須等於該 split 的標註框總數——這是從混淆矩陣
+    的定義推導出來的硬不變量（每個 GT 框必定落在其真實類別那一欄的某一格：配對到就落
+    M[預測,真實]，沒配對到就落 M[background,真實]），而 E2E 能自己數出答案。
+    """
+    section("階段 14／16：指標入帳與交叉驗算")
+    if not job_ids:
+        print("  沒有已完成的評估，略過")
+        return
+
+    stats = api("GET", "/registry/stats")
+    if not stats.get("available"):
+        print("  登錄簿資料庫離線，略過本階段")
+        return
+
+    for job_id in job_ids:
+        job = api("GET", f"/evaluations/{job_id}").get("job") or {}
+        overall = job.get("overall") or {}
+
+        rows = api("GET", "/registry/evaluations?limit=300").get("evaluations", [])
+        row = next((r for r in rows if r["job_id"] == job_id), None)
+        check("評估結果已寫進登錄簿", row is not None, job_id)
+        if row is None:
+            continue
+
+        for field in ("map50", "map50_95", "precision", "recall"):
+            check(f"登錄簿的 {field} 與 job 完全相等",
+                  row.get(field) == overall.get(field),
+                  f"{row.get(field)} vs {overall.get(field)}")
+
+        check("登錄簿的權重身分是 64 位元十六進位雜湊",
+              isinstance(row.get("weight_sha256"), str) and len(row["weight_sha256"]) == 64,
+              str(row.get("weight_sha256"))[:16])
+
+        acc = row.get("micro_accuracy")
+        tp, fp, fn = row.get("micro_tp"), row.get("micro_fp"), row.get("micro_fn")
+        if acc is None:
+            print("  （此次評估沒有混淆矩陣，略過 Micro-Accuracy 驗算）")
+            continue
+
+        print(f"  TP={tp:,} FP={fp:,} FN={fn:,}  Micro-Accuracy={acc}  "
+              f"（conf>={row.get('conf_threshold')}, IoU>={row.get('iou_threshold')}）")
+
+        check("Micro-Accuracy 在 [0,1] 之內", 0 <= acc <= 1, str(acc))
+        # 依《效能指標定義與評測方法》§2：Accuracy = TP/(TP+FP+FN)
+        denom = tp + fp + fn
+        expected = round(tp / denom, 4) if denom else None
+        check("Micro-Accuracy = TP/(TP+FP+FN)（以存進去的三個計數重算）",
+              expected is not None and abs(acc - expected) < 1e-4,
+              f"{acc} vs 重算 {expected}")
+
+        # 同一份 TP/FP/FN 導出的 P/R 必須滿足 1/(1/P + 1/R - 1) == Accuracy
+        mp, mr = row.get("micro_precision"), row.get("micro_recall")
+        if mp and mr:
+            identity = 1.0 / ((1.0 / mp) + (1.0 / mr) - 1.0)
+            check("恆等式成立：Accuracy == 1/(1/P + 1/R - 1)",
+                  abs(identity - acc) < 2e-3, f"{round(identity, 4)} vs {acc}")
+            check("Accuracy 不大於 Precision 與 Recall（分母較大，必為三者最小）",
+                  acc <= mp + 1e-6 and acc <= mr + 1e-6, f"{acc} / P={mp} / R={mr}")
+
+        # 硬不變量：TP + FN == 該 split 的標註框總數
+        expected_boxes = dataset_totals.get((job.get("dataset_name"), job.get("split")))
+        if expected_boxes:
+            check("TP + FN 等於該 split 的標註框總數（混淆矩陣定義推出的不變量）",
+                  tp + fn == expected_boxes,
+                  f"{tp:,}+{fn:,}={tp + fn:,} vs 實際數出 {expected_boxes:,}（已去除重複列）")
+        else:
+            print("  （無法從 LocalLibrary 獨立數出該 split 的標註框數，略過此項）")
+
+
+def phase_registry_durability(recorded_shas):
+    """帳本存活性：刪掉 session 之後，登錄簿的紀錄仍然在。
+
+    這是「附加層」設計的價值所在——session 是執行期狀態（LocalLibrary 來源的甚至刻意
+    不落地），帳本是長期事實。刪一個模型不該讓「我測過它、當時多少分」一起消失。
+    """
+    section("階段 15／16：帳本存活性（與 session 生命週期脫鉤）")
+    if not recorded_shas:
+        print("  登錄簿沒有紀錄，略過")
+        return
+
+    sha = next(iter(recorded_shas.values()))
+    sid = next(k for k, v in recorded_shas.items() if v == sha)
+
+    before_weights = len(api("GET", "/registry/weights?limit=200").get("weights", []))
+    before_evals = len(api("GET", "/registry/evaluations?limit=300").get("evaluations", []))
+
+    raw("DELETE", f"/sessions/{sid}", timeout=120)
+    check("session 已刪除", sid not in api("GET", "/sessions").get("sessions", {}))
+
+    after_weights = api("GET", "/registry/weights?limit=200").get("weights", [])
+    after_evals = api("GET", "/registry/evaluations?limit=300").get("evaluations", [])
+    check("刪除 session 後權重紀錄仍在登錄簿",
+          len(after_weights) == before_weights and any(w["sha256"] == sha for w in after_weights),
+          f"{before_weights} -> {len(after_weights)}")
+    check("刪除 session 後實測指標仍在登錄簿",
+          len(after_evals) == before_evals, f"{before_evals} -> {len(after_evals)}")
+
+    # 明確刪除帳本紀錄才會消失，且要 cascade 掉它的評估
+    detail = api("GET", f"/registry/weights/{sha}")
+    owned = len(detail.get("evaluations") or [])
+    removed = api("DELETE", f"/registry/weights/{sha}")
+    check("明確刪除帳本紀錄時連帶移除其評估",
+          removed.get("sha256") == sha and removed.get("deleted_evaluations") == owned,
+          f"移除 {removed.get('deleted_evaluations')} 筆評估")
+    check("刪除後查詢回 404",
+          raw("GET", f"/registry/weights/{sha}").status_code == 404)
+
+
 def phase_deletion_safety(sessions, lib_before):
-    section("階段 12／12：刪除安全性與持久化契約")
+    section("階段 16／16：刪除安全性與持久化契約")
     if len(sessions) < 1:
         print("  沒有 session 可刪，略過")
         return
@@ -635,7 +985,7 @@ def phase_deletion_safety(sessions, lib_before):
     victim = sids[0]
     survivors = {sid: sessions[sid]["weights_path"] for sid in sids[1:]}
 
-    requests.post(f"{BASE_URL}/delete-session", data={"session_id": victim}, timeout=120)
+    raw("DELETE", f"/sessions/{victim}", timeout=120)
     remaining = api("GET", "/sessions").get("sessions", {})
     check("目標 session 已移除", victim not in remaining)
     check("其餘 session 仍在", all(sid in remaining for sid in survivors))
@@ -690,7 +1040,11 @@ def main():
         phase_export(sessions)
         eval_jobs = phase_evaluation(sessions, datasets)
         phase_report(eval_jobs)
-        phase_deletion_safety(sessions, lib_before)
+        recorded = phase_registry_weights(sessions)
+        phase_registry_metrics(eval_jobs, count_boxes_per_split(LIBRARY_DIR))
+        phase_registry_durability(recorded)
+        # 刪除安全性排在最後：它會刪掉 session，而前面的階段還需要它們
+        phase_deletion_safety(api("GET", "/sessions").get("sessions", {}), lib_before)
     except requests.RequestException as exc:
         print(f"\n[ERROR] 與後端通訊失敗：{exc}")
         sys.exit(1)

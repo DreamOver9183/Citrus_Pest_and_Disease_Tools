@@ -33,6 +33,7 @@ import zipfile
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.config import LOCAL_LIBRARY_EXTRACT_DIR, MAX_SESSIONS
+from app.services import registry_service
 from app.services.dataset_analyzer import analyze_dataset
 from app.services.dataset_manager import ACTIVE_DATASETS, DATASETS_LOCK, register_dataset
 from app.services.session_manager import ACTIVE_SESSIONS, SESSIONS_LOCK, save_sessions_to_disk
@@ -387,6 +388,9 @@ def register(candidate_ids: List[str]) -> Dict[str, Any]:
     skipped = 0
     capped = False
     failed: List[str] = []
+    # 權重登錄簿的寫入延後到迴圈之後——雜湊是磁碟 I/O、寫入可能是網路上的 PostgreSQL，
+    # 都不該在持有 SESSIONS_LOCK 的期間發生（見 registry_service 的模組說明）。
+    pending_registry: List[tuple] = []
 
     for candidate in selected:
         if candidate["kind"] != "model":
@@ -405,6 +409,9 @@ def register(candidate_ids: List[str]) -> Dict[str, Any]:
                 continue
 
             session_id = f"run_{uuid.uuid4().hex[:8]}"
+            # hyperparameters 是完整的 args.yaml，只給登錄簿用；不放進 ACTIVE_SESSIONS
+            # （那份 dict 會被序列化進 sessions.json，塞進去只是無謂的膨脹）。
+            hyperparameters = record.pop("hyperparameters", None)
             with SESSIONS_LOCK:
                 ACTIVE_SESSIONS[session_id] = {
                     "metrics_csv_path": None,
@@ -414,6 +421,7 @@ def register(candidate_ids: List[str]) -> Dict[str, Any]:
                     "source": "local_library",
                 }
             registered_sessions.append(session_id)
+            pending_registry.append((session_id, hyperparameters))
         except Exception as exc:  # noqa: BLE001
             print(f"[LibraryScanner] Failed to register model {candidate['name']}: {exc}")
             failed.append(candidate["name"])
@@ -442,6 +450,19 @@ def register(candidate_ids: List[str]) -> Dict[str, Any]:
 
     if registered_sessions:
         save_sessions_to_disk()
+
+    # 寫進權重登錄簿。**在所有鎖之外**，且失敗不影響註冊結果——登錄簿是附加層，
+    # 資料庫沒起來時載入模型仍然要成功（record_weight 自己吞掉例外）。
+    for session_id, hyperparameters in pending_registry:
+        with SESSIONS_LOCK:
+            snapshot = dict(ACTIVE_SESSIONS.get(session_id) or {})
+        if not snapshot:
+            continue
+        sha = registry_service.record_weight(snapshot, hyperparameters)
+        if sha:
+            with SESSIONS_LOCK:
+                if session_id in ACTIVE_SESSIONS:
+                    ACTIVE_SESSIONS[session_id]["weight_sha256"] = sha
 
     return {
         "registered_sessions": registered_sessions,

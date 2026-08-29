@@ -56,9 +56,9 @@ def wait_for_server():
 def clear_sessions():
     res = requests.get(f"{BASE_URL}/sessions")
     if res.status_code == 200:
-        sessions = res.json().get("sessions", {})
+        sessions = (res.json().get("data") or {}).get("sessions", {})
         for sid in sessions.keys():
-            requests.post(f"{BASE_URL}/delete-session", data={"session_id": sid})
+            requests.delete(f"{BASE_URL}/sessions/{sid}")
     print("Sessions cleared.")
 
 
@@ -74,9 +74,9 @@ def test_yolo_flow(yolo_zip):
     with open(yolo_zip, "rb") as f:
         res = requests.post(f"{BASE_URL}/upload-model", files={"file": f})
     assert res.status_code == 200, f"Upload failed: {res.text}"
-    data = res.json()
-    assert data["status"] == "success", f"Upload returned error: {data}"
-    session_id = data["registered_sessions"][0]
+    body = res.json()
+    assert body["status"] == "success", f"Upload returned error: {body}"
+    session_id = body["data"]["registered_sessions"][0]
     print(f"YOLO Model uploaded successfully. Session ID: {session_id}")
     return session_id
 
@@ -87,9 +87,9 @@ def test_ssd_flow(ssd_pth):
     with open(ssd_pth, "rb") as f:
         res = requests.post(f"{BASE_URL}/upload-model", files={"file": f})
     assert res.status_code == 200, f"Upload failed: {res.text}"
-    data = res.json()
-    assert data["status"] == "success", f"Upload returned error: {data}"
-    session_id = data["registered_sessions"][0]
+    body = res.json()
+    assert body["status"] == "success", f"Upload returned error: {body}"
+    session_id = body["data"]["registered_sessions"][0]
     print(f"SSD Model uploaded successfully. Session ID: {session_id}")
     return session_id
 
@@ -97,15 +97,17 @@ def test_ssd_flow(ssd_pth):
 def run_inference(session_id, image_path):
     print(f"\n--- Running Inference for Session: {session_id} ---")
     with open(image_path, "rb") as f:
+        # session_id/conf 已從 query param 改成 multipart 表單欄位（見 API 契約正規化）
         res = requests.post(
             f"{BASE_URL}/inference",
-            params={"session_id": session_id, "conf": 0.25},
+            data={"session_id": session_id, "conf": 0.25},
             files={"file": f},
         )
     assert res.status_code == 200, f"Inference failed: {res.text}"
-    data = res.json()
-    assert data["status"] == "success", f"Inference error: {data}"
+    body = res.json()
+    assert body["status"] == "success", f"Inference error: {body}"
 
+    data = body["data"]
     counts = data.get("counts", 0)
     detections = data.get("detections", {})
     print(f"Inference successful! Counts: {counts}, Detections: {detections}")

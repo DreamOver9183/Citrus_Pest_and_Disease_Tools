@@ -11,6 +11,25 @@ jobs:
     defaults:
       run:
         working-directory: ShowResultsWeb/backend
+
+    # 權重登錄簿是雙軌的：本機開發與預設測試走 SQLite，Docker 走 PostgreSQL。
+    # 這個 service container 讓第二軌也真的被跑過——否則 Postgres 那條路只有在
+    # 使用者按下 `docker compose up` 時才第一次被執行。
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: citrus
+          POSTGRES_PASSWORD: citrus
+          POSTGRES_DB: citrus_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U citrus -d citrus_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,8 +42,32 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
-      - name: Run unit tests
+      # 第一軌：預設設定（SQLite 檔案），與開發者本機跑 pytest 完全相同
+      - name: Run unit tests (SQLite)
         run: pytest -v
+
+      # 第二軌：把 DATABASE_URL 指向 Postgres。登錄簿的測試會用自己的 tmp SQLite
+      # 覆寫連線（reset_for_tests），真正被這一輪驗證的是「應用啟動時能連上
+      # PostgreSQL 並建表」以及所有非登錄簿測試在該設定下仍然通過。
+      - name: Run unit tests (PostgreSQL)
+        env:
+          DATABASE_URL: postgresql+psycopg://citrus:citrus@localhost:5432/citrus_test
+        run: pytest -v
+
+      # 明確驗證 Postgres 那一軌真的建得起表——上面那輪即使連線失敗也會通過
+      # （資料庫是可選相依，連不上只會降級），所以需要一個會因失敗而中斷的檢查。
+      - name: Verify PostgreSQL schema creation
+        env:
+          DATABASE_URL: postgresql+psycopg://citrus:citrus@localhost:5432/citrus_test
+        run: |
+          python - <<'PY'
+          from app.db import engine
+          from app.services import registry_service
+          assert engine.init_db(retries=3), f"init_db failed: {engine.last_error()}"
+          assert engine.backend_name() == "postgresql", engine.backend_name()
+          assert registry_service.stats()["available"] is True
+          print("PostgreSQL registry schema OK")
+          PY
 
   frontend-build:
     runs-on: ubuntu-latest

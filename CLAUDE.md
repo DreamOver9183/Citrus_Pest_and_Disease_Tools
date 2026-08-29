@@ -12,7 +12,9 @@
 
 ## 專案速覽
 
-柑橘病蟲害偵測工具包。FastAPI + PyTorch 後端（YOLO / SSDLite 雙軌），React + Vite 前端，單一 Docker image 同時服務兩者（8000 port，無反向代理）。無資料庫、無身分驗證——這是刻意的設計決策（單機本地展示工具），不是待補的缺口，見 architecture.md §2「關鍵設計決策」。
+柑橘病蟲害偵測工具包。FastAPI + PyTorch 後端（YOLO / SSDLite 雙軌），React + Vite 前端，應用本身仍是單一 Docker image 同時服務兩者（8000 port，無反向代理），另加一個 PostgreSQL 容器給權重登錄簿。無身分驗證——這是刻意的設計決策（單機本地展示工具），不是待補的缺口。
+
+**資料庫只存「長期帳本」，不存執行期狀態。** session/dataset 仍然是記憶體 dict + JSON 快照，`LocalLibrary` 掃描結果仍然刻意不落地。登錄簿記的是「這台機器看過哪些權重、各自的超參數與歷次實測指標」，身分是權重檔內容的 SHA-256。見 architecture.md §10。
 
 ## 開發指令
 
@@ -30,14 +32,24 @@ cd ShowResultsWeb/backend && uvicorn main:app --reload --host 127.0.0.1 --port 8
 cd ShowResultsWeb/frontend && npm run dev     # 代理 /api、/static、/samples 到 8000
 
 # Docker（唯一能跑 TFLite 匯出的環境；Windows 開發模式下 TFLite 會顯示不可用）
+# 會一併起 postgres:16-alpine 給權重登錄簿；單指令仍然成立
 docker compose up --build
+
+# 確認容器內的登錄簿真的連上 PostgreSQL（而不是靜默降級）
+# 一定要走 HTTP 問正在跑的那個行程。`docker compose exec python -c ...` 會開一個**全新**
+# 的 Python 行程，它沒跑過 lifespan、沒呼叫 init_db()，因此 is_available() 永遠是 False——
+# 那是行程隔離，不是資料庫掛了。
+curl -s localhost:8000/api/registry/stats     # 應含 "backend":"postgresql","available":true
+
+# 本機開發不需要 Docker：DATABASE_URL 未設定時自動落回
+# extracted_runs/registry.db（SQLite），pytest 亦同，零設定。
 
 # E2E（需要後端已在執行；兩支都會在缺少素材時優雅跳過）
 python e2e_tests/e2e_local_library.py       # 主力：用 LocalLibrary/ 內的真實檔案跑完整流程
 E2E_ASSETS_DIR=<path> python e2e_tests/e2e_test.py   # 早期的上傳流程煙霧測試
 ```
 
-沒有 lint/format 工具鏈（無 ruff/eslint 設定檔），改動風格比照鄰近程式碼即可。CI（`.github/workflows/ci.yml`）只跑 `pytest` 與 `npm run build` 兩項工作，兩者本機都須先過再提交。
+沒有 lint/format 工具鏈（無 ruff/eslint 設定檔），改動風格比照鄰近程式碼即可。CI（`.github/workflows/ci.yml`）跑 `pytest`（SQLite 與 PostgreSQL 各一輪）與 `npm run build`，本機至少要過 SQLite 那一輪與前端 build 再提交。
 
 **改完 UI 一定要用瀏覽器實際操作過（含分頁切換），不要只憑 build 成功就回報完成**——這個專案有多個 bug 是「型別檢查/測試全過但功能實際壞掉」，見下方地雷清單。
 
@@ -67,7 +79,13 @@ E2E_ASSETS_DIR=<path> python e2e_tests/e2e_test.py   # 早期的上傳流程煙�
 
 11. **新增任何會把 session 的 `dir_path` 指到 `extracted_runs/<新容器>/` 底下的功能時，那個容器名一定要加進 `delete_session()` 的白名單**（[session_manager.py](ShowResultsWeb/backend/app/services/session_manager.py) 內的 `["temp_output", "temp", "reports", …]`）。該函式用字串切割反推刪除目標，容器名不在白名單就會 `rmtree` 整個容器根目錄，刪一個 session 連帶清空其他所有同類資料。`datasets`/`exports`/`local_library`/`evaluations` 都各自踩過一次，`tests/test_session_container_dirs.py` 有參數化測試，新容器記得補一行。
 
-12. **Pydantic `response_model_exclude_unset=True` 會靜默裁掉沒賦值的欄位**，前端拿到的會是 `undefined` 而非欄位不存在的 KeyError。新增回應欄位時記得在建構回應物件當下就賦值（哪怕是 `None`），不要依賴 Pydantic 預設值。
+12. **所有 API 回應一律走 `ApiResponse` 信封，錯誤一律 `raise ApiException`。** 不要回裸 dict，不要用 HTTP 200 夾帶 `{"status": "error"}`，不要重新引入 `response_model_exclude_unset=True`（它會靜默裁掉沒賦值的欄位，前端拿到 `undefined`——那是舊版的地雷，已由固定信封消除）。`tests/test_envelope.py` 會走訪所有路由強制這件事，新端點沒照做會直接紅。錯誤碼與 HTTP 狀態的對照表在 [app/core/envelope.py](ShowResultsWeb/backend/app/core/envelope.py) 的 `ERROR_STATUS`，分界線是「400 = 請求本身壞掉，422 = 請求沒問題但這件事現在不能做」。
+
+13. **權重登錄簿的寫入絕不能讓主流程失敗，也絕不能在持鎖時發生。** 資料庫是**可選**相依：`registry_service` 的每個寫入函式都自己吞例外並只印日誌，呼叫端不必判斷成敗。而且 DB I/O 一律在 `SESSIONS_LOCK` / `EVAL_JOBS_LOCK` **之外**——資料庫可能在網路彼端，在鎖內等待往返會讓所有推論請求排隊。目前有三個寫入接點（`sessions.py` 兩條上傳路徑、`library_scanner.register()`、`evaluation_service._process_job()`），**新增載入模型的路徑時記得補上第四個**——漏掉 `library_scanner` 那次，單元測試全過而 E2E 才抓到。
+
+14. **權重的身分是檔案內容的 SHA-256，不是 `session_id`。** 後者每次掃描都重新產生，拿它當 key 會讓同一顆 best.pt 每重掃一次就多一列。另外**絕不在 `library_scanner.discover()` 裡算雜湊**：掃描是唯讀探索、要維持秒級，對每個 `.pt` 做雜湊會讓它變成分鐘級。
+
+15. **資料庫模型只能用 SQLAlchemy 通用型別**（`JSON`/`Float`/`String`）。`JSONB`、`ARRAY` 只有 PostgreSQL 有，用了就毀掉「Docker 走 Postgres、本機與 CI 走 SQLite」的雙軌，而那條雙軌是本機開發與 CI 零設定的前提。
 
 ## 依賴版本鎖定，改動前三思
 
@@ -78,11 +96,15 @@ E2E_ASSETS_DIR=<path> python e2e_tests/e2e_test.py   # 早期的上傳流程煙�
 ## 刻意不做的事（不要「順手修掉」）
 
 - `ModelManager` 同時只駐留一個模型（切換時主動 `del`+GC）——併發測試不同模型會互相搶佔重新載入，是刻意的記憶體安全取捨。
-- 無資料庫、無身分驗證——工具定位是本地離線展示。
+- 無身分驗證——工具定位是本地離線展示。
+- 資料庫**只當附加的長期帳本**，不接管 session/dataset 狀態，也不改變「LocalLibrary 掃描結果不落地」——兩者生命週期本來就不同。
+- 登錄簿**不引入 Alembic**：schema 用 `create_all()` 建立，日後只做加欄位的相容變更。單機、單使用者、資料可重建（重新掃描＋重跑評估）的工具，migration 框架的維護成本高於它解決的問題。
+- 刪除 session 或評估 job **不連帶刪除**登錄簿紀錄（反之亦然）——那正是帳本的價值：模型刪掉了、系統重啟了，「我測過它、當時多少分」仍然查得到。
 - 匯出功能的 job **不支援取消**——`model.export()` 執行中無法從 Python 中止，給一個按了沒用的取消鍵比不給更糟。
 - 匯出只出 FP32，`quantize` 白名單刻意只放行 `32`/`None`——ONNX 的 FP16 轉換失敗在 ultralytics 內是被捕捉並警告的，等於會靜默交出標著 FP16 的 FP32 檔，貿然開放 FP16 選項會是使用者看不見的錯誤。
 - LocalLibrary 掃描結果不落地（重啟後消失）——這是設計目標本身（「直到系統關閉、刪除暫存」），不是忘記持久化。
 - LocalLibrary 的掃描**不會自動載入**任何東西，一定要使用者勾選後按載入——`MAX_SESSIONS` 只有 3，自動載入等於由掃描順序替使用者決定拿到哪幾個模型。
+- Micro-Accuracy（Jaccard）**不另外掃一次資料集**，直接取 `val()` 已累積好的混淆矩陣，代價為零；代價是它綁在 ultralytics 寫死的 conf=0.25 / IoU=0.45（規格文件寫 IoU≥0.5，這 0.05 的落差**寫進資料列與 UI 明說**，而不是靠 monkeypatch 套件內部去消除）。
 - 評估**不自己實作 mAP**，一律走 `model.val()`——自行實作 IoU 配對與 PR 積分容易在細節上算錯，交出一個和 ultralytics 對不上的數字在學術場合是負分。同理刻意不做 COCO 式分桶 AP。
 - 已完成的評估結果**跨重啟保留，且不做「來源 session 還在嗎」的孤兒清除**（與 `export_service` 明確不同）——本專案多數 session 來自不落地的 LocalLibrary，那個過濾等於每次重啟刪光，而一次評估要跑 4 分鐘。
 

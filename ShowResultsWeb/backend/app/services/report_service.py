@@ -196,6 +196,9 @@ def _build_job_view(job: Dict[str, Any], plot_paths: Dict[str, str]) -> Dict[str
         "image_count": job.get("image_count"),
         "elapsed_seconds": job.get("elapsed_seconds"),
         "overall": job.get("overall") or {},
+        # 舊 manifest（本功能之前產生的）沒有 micro 欄位；給 {} 讓模板的
+        # selectattr('micro') 直接把它濾掉，而不是在渲染時炸開。
+        "micro": job.get("micro") or {},
         "speed_ms": job.get("speed_ms") or {},
         "vocab_check": job.get("vocab_check") or {},
         "rows": rows,

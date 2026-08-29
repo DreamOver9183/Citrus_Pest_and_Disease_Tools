@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
-import axios from 'axios';
+import { apiUpload, errorMessage, axios } from '../../api/client';
 import { useExperiment } from '../../context/ExperimentContext';
 import { traverseFileTree } from './traverseFileTree';
 
@@ -37,32 +37,30 @@ export const useLiveDemoInference = () => {
 
   const runSingleInference = async (index, sessionId, file, confVal, signal) => {
     try {
+      // session_id 與 conf 改成 multipart 表單欄位（原本在 query string）：
+      // 這個端點本來就必須是 multipart，把參數留在 query 等於同一個請求有兩套
+      // 參數傳遞方式。統一之後的規則是「POST 的參數都在 body 裡」，沒有例外。
       const formData = new FormData();
       formData.append('file', file);
-      const res = await axios.post(`/api/inference?session_id=${sessionId}&conf=${confVal}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        signal
-      });
+      formData.append('session_id', sessionId);
+      formData.append('conf', confVal);
+      const data = await apiUpload('/inference', formData, { signal });
 
-      if (res.data.status === 'success') {
-        setResults(prev => prev.map((item, idx) => idx === index ? {
-          ...item,
-          loading: false,
-          resultUrl: res.data.url,
-          originalUrl: res.data.original_url || item.originalUrl,
-          counts: res.data.counts,
-          detections: res.data.detections,
-          deviceUsed: res.data.device_used
-        } : item));
-      } else {
-        throw new Error(res.data.message || '推論失敗');
-      }
+      setResults(prev => prev.map((item, idx) => idx === index ? {
+        ...item,
+        loading: false,
+        resultUrl: data.url,
+        originalUrl: data.original_url || item.originalUrl,
+        counts: data.counts,
+        detections: data.detections,
+        deviceUsed: data.device_used
+      } : item));
     } catch (err) {
       if (axios.isCancel(err)) return; // 被 AbortController 取消的請求，靜默忽略
       setResults(prev => prev.map((item, idx) => idx === index ? {
         ...item,
         loading: false,
-        error: err.response?.data?.detail || err.message || '連線錯誤'
+        error: errorMessage(err, '推論失敗')
       } : item));
     }
   };

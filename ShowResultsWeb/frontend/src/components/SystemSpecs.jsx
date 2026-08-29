@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import axios from 'axios';
+import { apiUpload, errorMessage } from '../api/client';
 import { useExperiment } from '../context/ExperimentContext';
 import ExportPanel from './system-specs/ExportPanel';
 import LocalLibraryPanel from './system-specs/LocalLibraryPanel';
@@ -84,20 +84,14 @@ const SystemSpecs = () => {
       formData.append('file', file);
 
       try {
-        const res = await axios.post('/api/upload-model', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-
-        if (res.data.status === 'success') {
-          currentSessions = res.data.sessions;
-          setSessions(currentSessions);
-          successCount++;
-        } else {
-          setError(prev => prev ? `${prev} | 檔案 ${file.name} 載入失敗: ${res.data.message}` : `檔案 ${file.name} 載入失敗: ${res.data.message}`);
-        }
+        const data = await apiUpload('/upload-model', formData);
+        currentSessions = data.sessions;
+        setSessions(currentSessions);
+        successCount++;
       } catch (err) {
         console.error(err);
-        setError(prev => prev ? `${prev} | 連線後端 API 逾時，請檢查 FastAPI 服務` : `連線後端 API 逾時，請檢查 FastAPI 服務`);
+        const detail = `檔案 ${file.name} 載入失敗: ${errorMessage(err)}`;
+        setError(prev => prev ? `${prev} | ${detail}` : detail);
       }
     }
 

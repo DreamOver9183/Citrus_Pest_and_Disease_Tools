@@ -4,20 +4,29 @@
 
 ## 1. 部署拓樸
 
-單一 Docker image：多階段建置 (`Dockerfile`) 先用 `node:20-alpine` 建置 React SPA (`npm run build` → `frontend/dist`)，再複製進 `python:3.12-slim`，FastAPI 用 `StaticFiles(html=True)` 掛載 `frontend/dist` 到 `/`。前後端同源、單一 port（8000）對外，不需額外反向代理。`docker-compose.yml` 把 `Datasets/`（唯讀）與 `ShowResultsWeb/backend/extracted_runs/`（讀寫）掛成 volume 做持久化。
+應用本身是單一 Docker image：多階段建置 (`Dockerfile`) 先用 `node:20-alpine` 建置 React SPA (`npm run build` → `frontend/dist`)，再複製進 `python:3.12-slim`，FastAPI 用 `StaticFiles(html=True)` 掛載 `frontend/dist` 到 `/`。前後端同源、單一 port（8000）對外，不需額外反向代理。`docker-compose.yml` 把 `Datasets/`（唯讀）與 `ShowResultsWeb/backend/extracted_runs/`（讀寫）掛成 volume 做持久化。
+
+`docker-compose.yml` 另起一個 `postgres:16-alpine` 服務給權重登錄簿（§10），資料放 named volume。`docker compose up --build` 仍然是唯一需要的指令：`healthcheck` + `depends_on: service_healthy` 保證啟動順序，應用端另有一層連線重試吸收殘餘的競速窗口。資料庫是**可選相依**——連不上時只有 `/api/registry/*` 降級回 503，其餘功能完全不受影響。
+
+`db` 服務刻意**不指定 `platform`**：`postgres:16-alpine` 有 arm64 映像，讓它在 ARM 主機跑原生比跟著應用一起被逼進 amd64 模擬快得多（應用釘 amd64 是 TFLite 的限制，與資料庫無關）。
 
 ## 2. 後端（`ShowResultsWeb/backend/`）
 
 ```
 main.py                        FastAPI 入口：CORS、路由註冊、靜態掛載、startup 清理
-app/schemas.py                 各路由共用的 Pydantic 回應模型（供 /docs 顯示完整 schema）
+app/schemas.py                 各路由共用的 payload / request 模型（供 /docs 顯示完整 schema）
 app/core/config.py             唯一路徑/設定真相來源（env override + 預設值），ensure_dirs()
+app/core/envelope.py           統一回應信封 ApiResponse[T]、ApiException 與四個全域 handler
+app/db/
+  engine.py                    連線與 session 工廠；資料庫是可選相依，連不上只降級不中斷
+  models.py                    weights / training_runs / evaluations 三張表（僅用通用型別）
 app/routers/
   sessions.py                  session CRUD + 模型上傳（ZIP / 單一權重檔）
   datasets.py                  資料集上傳分析 / 列表 / 刪除
   exports.py                   模型格式轉換：能力查詢 / 送出 job / 輪詢 / 下載 / 刪除
   local_library.py             本機資料夾：路徑查詢 / 掃描（唯讀）/ 載入勾選項目
   evaluations.py               驗證評估：可用目標查詢 / 送出 / 輪詢 / 圖表 / 刪除
+  registry.py                  權重登錄簿：清單 / 明細 / 指標帳本 / 統計 / 刪除
   reports.py                   成果報告：產生 / 列表 / 檢視 / 下載 / 刪除
   devices.py                   裝置列舉 / 切換
   inference.py                 執行推論（sync def，靠 FastAPI 執行緒池跑 PyTorch）
@@ -34,6 +43,7 @@ app/services/
   evaluation_service.py        評估 job 表、daemon worker、model.val() 與指標正規化
   dataset_resolver.py          把資料集記錄解析成磁碟上真實的 split 目錄
   report_service.py            Jinja2 渲染、圖片 base64 內嵌、寫入 REPORTS_DIR
+  registry_service.py          權重雜湊、登錄簿讀寫；所有寫入都吞例外且在鎖之外
   model_service.py             ModelManager 單例：同時只保留一個模型在記憶體
   device_service.py            裝置探測結果快取（30s TTL）
 app/utils/
@@ -43,27 +53,31 @@ app/utils/
   dir_handler.py               目錄的 YOLO run 索引與就地權重索引（zip_handler 的目錄對應版本）
   image_cropper.py             results.png 網格像素裁切（2x5 grid）
   device_probe.py              torch/psutil 偵測 CPU/CUDA/MPS
+tests/apitest.py               路由測試共用的信封 helper（每次呼叫順帶驗一次契約）
 tests/                         pytest 單元測試（zip_handler / image_cropper / session_manager /
                                dataset_analyzer / dataset_manager / dataset_dir /
                                dir_handler / export_service / export_routes /
                                local_library_router / evaluation_service /
                                evaluation_routes / dataset_resolver /
-                               session_container_dirs，共 215 項）
+                               session_container_dirs / envelope / micro_accuracy /
+                               registry_service / registry_routes，共 349 項）
 ```
 
 ### 關鍵設計決策（有意保留，非缺陷）
 
 - **`ModelManager` 單例、同時只駐留一個模型**：切換模型時主動 `del` + `gc.collect()` + `torch.cuda.empty_cache()`，避免多個大型模型疊加造成 OOM。這代表併發測試不同模型時會互相搶佔、觸發重新載入，是刻意的記憶體安全取捨，不會修改。
-- **無資料庫**：Session 狀態 = 記憶體 dict（`ACTIVE_SESSIONS`）+ JSON 快照（`sessions.json`）+ 檔案系統路徑，啟動時以「權重檔是否存在」過濾幽靈 session。對單機、單使用者的本地展示工具而言是合理設計。
+- **執行期狀態不進資料庫**：Session 狀態 = 記憶體 dict（`ACTIVE_SESSIONS`）+ JSON 快照（`sessions.json`）+ 檔案系統路徑，啟動時以「權重檔是否存在」過濾幽靈 session。2026-08 新增的權重登錄簿（§10）是**附加**的長期帳本，不取代這一層——session 回答「現在載入了什麼」，登錄簿回答「這台機器看過哪些權重」，兩者生命週期本來就不同。
 - **無身分驗證**：工具定位為本地離線展示，非對外服務。
 - **`ACTIVE_SESSIONS` 併發保護**：所有跨執行緒池的讀-改-寫操作都透過 `session_manager.SESSIONS_LOCK`（`threading.RLock`）保護，對齊 `ModelManager` 既有的鎖定模式。
-- **API 回應契約**：所有路由都定義了 `response_model`（`app/schemas.py`），搭配 `response_model_exclude_unset=True` 讓錯誤回應（僅 `status`/`message`）與成功回應維持原本的最小化 JSON 形狀，不因型別化而改變前端可見的回應內容。
+- **API 回應契約**：所有路由回同一個 `ApiResponse` 信封，錯誤走真正的 HTTP 狀態碼，由 `tests/test_envelope.py` 強制。完整說明見 §9。
 
 ## 3. 前端（`ShowResultsWeb/frontend/src/`）
 
 ```
-main.jsx → App.jsx                     五分頁 SPA：模型與裝置 / 消融分析 / 即時診斷 / 資料集 / 驗證評估
+main.jsx → App.jsx                     六分頁 SPA：模型與裝置 / 消融分析 / 即時診斷 / 資料集 /
+                                       驗證評估 / 權重登錄簿
                                        （模型匯出是 session 卡片上的動作，不另開分頁）
+api/client.js                          統一 API 客戶端：拆信封、把錯誤正規化成丟出的 ApiError
 context/
   ExperimentContext.jsx                組合層 Provider：組合七個獨立 hook，對外仍暴露單一 useExperiment()
   hooks/
@@ -74,6 +88,7 @@ context/
     useModelExport.js                  匯出 job 狀態與輪詢迴圈（跨分頁切換不遺失）
     useLocalLibrary.js                 本機資料夾路徑、候選清單與勾選狀態（跨分頁切換不遺失）
     useEvaluation.js                   評估 job 輪詢、報告清單（跨分頁切換不遺失）
+    useRegistry.js                     登錄簿清單、排序與展開狀態（跨分頁切換不遺失）
 components/
   SystemSpecs.jsx                      上傳、裝置選擇、session 管理
   MetricDashboard.jsx                  消融看板協調器（狀態 + 資料抓取 + 版面）
@@ -108,6 +123,12 @@ components/
     ValidationIssueList.jsx            健檢結果（error/warning/info 分級）
     DefinitionViewer.jsx               原始 data.yaml / COCO json 檢視
     GlassTooltip.jsx                   深色玻璃質感 tooltip
+  Registry.jsx                         權重登錄簿協調器（總覽磚 + 清單／帳本切換）
+  registry/
+    WeightTable.jsx                    可排序的權重清單
+    WeightDetailPanel.jsx              完整訓練超參數 + 該權重的歷次實測
+    MetricLedgerTable.jsx              跨權重的指標帳本
+    registryFormat.js                  格式化與靜態 Tailwind class 查表
   Lightbox.jsx                         自訂 Modal：滾動鎖定、拖曳邊界、Esc 關閉
 ```
 
@@ -116,7 +137,7 @@ components/
 
 ### Context 組合模式
 
-`ExperimentContext.jsx` 本身不持有業務狀態，而是組合 `useSessions`、`useDeviceControl`、`useLiveDemoState`、`useDatasetState`、`useModelExport`、`useLocalLibrary`、`useEvaluation` 七個獨立 hook 的回傳值，攤平後透過同一個 `useExperiment()` 對外暴露。這是刻意的 adapter 設計：既有元件（`SystemSpecs.jsx`、`LiveDemo.jsx`、`MetricDashboard.jsx`、`App.jsx`）呼叫 `useExperiment()` 的方式完全不需變動，同時七個 hook 各自獨立、可單獨測試或重用。`deleteSession` 是唯一的例外——組合層額外包了一層，在刪除後若已無任何 session，會呼叫 `setActiveTab('init')`（此邏輯原本就存在，只是搬到組合層，因為 `activeTab` 屬於頁面導覽狀態、不屬於任一個子 hook）。
+`ExperimentContext.jsx` 本身不持有業務狀態，而是組合 `useSessions`、`useDeviceControl`、`useLiveDemoState`、`useDatasetState`、`useModelExport`、`useLocalLibrary`、`useEvaluation`、`useRegistry` 八個獨立 hook 的回傳值，攤平後透過同一個 `useExperiment()` 對外暴露。這是刻意的 adapter 設計：既有元件（`SystemSpecs.jsx`、`LiveDemo.jsx`、`MetricDashboard.jsx`、`App.jsx`）呼叫 `useExperiment()` 的方式完全不需變動，同時八個 hook 各自獨立、可單獨測試或重用。`deleteSession` 是唯一的例外——組合層額外包了一層，在刪除後若已無任何 session，會呼叫 `setActiveTab('init')`（此邏輯原本就存在，只是搬到組合層，因為 `activeTab` 屬於頁面導覽狀態、不屬於任一個子 hook）。
 
 ## 4. 資料集分析（第 4 分頁）
 
@@ -443,10 +464,169 @@ docker compose exec citrus-detection-app python -c "from app.core.config import 
 
 輸出應為 `/app/Datasets/samples`，且 `curl localhost:8000/samples/<某張實際存在的圖>` 應回 200。
 
-## 9. 已知限制
+## 9. API 契約：統一信封（2026-08 正規化）
+
+在此之前，同一個後端有四種回應形狀並存：成功時 `{"status": "success", ...payload}`；失敗時可能是 HTTP 200 帶 `{"status": "error", "message": ...}`、`HTTPException` 的 `{"detail": "..."}`、或 FastAPI 驗證失敗的 `{"detail": [{...}]}`。請求端同樣混亂：`Form(...)`、JSON body、query param 三種並用，刪除全部走 `POST /xxx/delete`。
+
+前端的代價很具體：每個 hook 都要寫 `if (res.data.status === 'success')`，再補一段 `err.response?.data?.detail || err.message || '連線失敗'` 的三段 fallback。而「HTTP 200 但其實失敗」讓 axios 的錯誤路徑形同虛設——真正的網路錯誤與業務錯誤走完全不同的分支。
+
+### 回應：一種形狀
+
+```json
+{"status": "success", "data": {...}, "error": null,                          "meta": {...}|null}
+{"status": "error",   "data": null,  "error": {"code": ..., "message": ...}, "meta": null}
+```
+
+四個欄位**永遠存在**。這也是移除 `response_model_exclude_unset=True` 的理由：那個選項會把未賦值的 key 從 JSON 靜默裁掉，前端拿到 `undefined` 而不是可偵測的錯誤（原 CLAUDE.md 硬規則 12 的地雷，現已從根本消除）。
+
+實作在 [app/core/envelope.py](../ShowResultsWeb/backend/app/core/envelope.py)：`ApiResponse[T]` 泛型模型 + `ok()` helper + `ApiException` + 四個全域 exception handler（`ApiException` / `RequestValidationError` / `StarletteHTTPException` / `Exception`）。
+
+### 錯誤碼與 HTTP 狀態（唯一真相）
+
+| code | HTTP | 用於 |
+|---|---|---|
+| `validation_error` | 400 | 請求格式或欄位不合法（含 FastAPI 原本回 422 的驗證失敗） |
+| `not_found` | 404 | session / dataset / job / report / weight 不存在 |
+| `conflict` | 409 | 掃描或分析正在進行中 |
+| `capacity_reached` | 409 | 已達 `MAX_SESSIONS` |
+| `unsupported_format` | 415 | 副檔名不支援 |
+| `precondition_failed` | 422 | 格式正確但語意上不能執行（類別數不符、資料集無影像位元組、非 YOLO 架構） |
+| `queue_full` | 429 | 匯出／評估佇列已滿 |
+| `internal_error` | 500 | 未預期例外 |
+| `dependency_unavailable` | 503 | 資料庫等可選相依不可用 |
+
+分界線：**400 = 請求本身壞掉，422 = 請求沒問題但這件事現在不能做。** FastAPI 預設把請求驗證失敗回成 422，這裡刻意改回 400，好讓 422 專門承載「使用者需要原封不動看到的那句說明」。
+
+### 請求：JSON body + 正確的動詞
+
+除三個**真正的檔案上傳**（`/api/upload-model`、`/api/upload-dataset`、`/api/inference`，維持 multipart）之外，所有寫入端點吃 JSON body，GET 用型別化 query param，刪除用 `DELETE` + path id。
+
+| 舊 | 新 |
+|---|---|
+| `POST /delete-session`（Form） | `DELETE /sessions/{session_id}` |
+| `POST /delete-dataset`（Form） | `DELETE /datasets/{dataset_id}` |
+| `POST /export/{id}/delete` | `DELETE /export/{id}` |
+| `POST /evaluations/{id}/delete` | `DELETE /evaluations/{id}` |
+| `POST /reports/{id}/delete` | `DELETE /reports/{id}` |
+| `POST /set-device`、`/export`、`/evaluations`、`/update-session-name`（Form） | 同路徑，改吃 JSON body |
+| `POST /inference?session_id=&conf=` | 兩個參數改成 multipart 表單欄位 |
+
+`/api/upload-zip` 這個向後相容別名一併移除。
+
+`/inference` 的參數搬進 body 是刻意的：那個端點本來就必須是 multipart，把參數留在 query 等於同一個請求有兩套參數傳遞方式。統一後的規則沒有例外——**POST 的參數都在 body 裡**。
+
+### 契約由測試強制，不靠自律
+
+正規化最容易失敗的方式不是一開始做錯，而是慢慢退化。[tests/test_envelope.py](../ShowResultsWeb/backend/tests/test_envelope.py) 走訪 `app.routes` 本身，對每個 `/api` 路由斷言 `response_model` 是 `ApiResponse[...]`、且沒有任何路由還在用 `exclude_unset`；再加上執行期的形狀檢查（成功與失敗的 key 集合必須相同、404 必須真的是 404）。
+
+另外 `tests/apitest.py` 的 `data()` / `error()` 兩個 helper 讓**每一支路由測試都順帶驗一次信封**，契約因此被整個測試套件反覆檢查，而不是靠單獨一支測試孤軍守著。
+
+> 走訪路由有個容易踩空的地方：FastAPI 0.141 起 `include_router()` 掛上的是 `_IncludedRouter` 容器，不再把 `APIRoute` 攤平進 `app.routes`，而容器底下的 route 只帶未加前綴的路徑。直接過濾頂層會**靜默**得到空清單、測試變成空跑——所以 `test_there_are_api_routes_to_check` 專門擋這件事。
+
+### 前端：單一客戶端
+
+[frontend/src/api/client.js](../ShowResultsWeb/frontend/src/api/client.js) 用一個 axios interceptor 把信封拆掉：成功回 `data`，失敗**丟出** `ApiError { code, message, details, status }`。於是 hook 的錯誤處理從「三種形狀各判一次」收斂成一個 `try/catch`。
+
+唯一的特例：`axios.isCancel` 的取消物件必須原樣穿透——`useLiveDemoInference` 依賴它靜默忽略被 `AbortController` 取消的請求，包成 `ApiError` 會讓使用者看到假的錯誤訊息。
+
+## 10. 權重登錄簿（資料庫）
+
+§2 原本明列「無資料庫」是刻意設計。那個決策對**執行期狀態**仍然成立——載入了哪些模型、選了哪個裝置，重啟後本來就該重來。資料庫解決的是另一件事。
+
+### 這個功能填補的缺口
+
+- `session_id` 是 `run_<uuid8>`，**每次掃描／上傳都重新產生**，且 LocalLibrary 來源的 session 依設計不落地（§6）。重啟後「這顆權重我測過、超參數是什麼、當時實測多少」全部消失。
+- `args.yaml` 的完整超參數在 `dir_handler.py` 只取出 `epochs`/`optimizer`/`model` 三個鍵，其餘**當場丟棄**。實測本專案的 args.yaml 有 **116 個鍵**——被丟掉的 113 項（lr0、mosaic、patience、augment 各項…）正是消融研究要比較的東西。
+- 一次評估要跑數分鐘，結果只以 job manifest 存在，無法跨權重查詢、排序或比較。
+
+### 身分是內容雜湊，不是 session_id
+
+```
+weights            一顆權重檔一列，主鍵 = 檔案內容的 SHA-256
+  ├── training_runs   訓練當時的紀錄（完整 args.yaml + results.csv 最後一列），1:1
+  └── evaluations     本系統實測出來的每一次評估，1:N
+```
+
+用 `session_id` 當 key 會讓同一顆 best.pt 每重掃一次就多一列，帳本一週後就沒法看。內容雜湊還有個附帶好處：同一顆權重無論是從資料夾就地引用、還是從 ZIP 解壓出來，都收斂到同一列。
+
+**SHA-256 只在註冊／上傳時算，絕不在 `discover()` 裡算**——掃描是唯讀探索、要維持秒級（實測 0.66 秒掃完 126 個檔案），對每個 `.pt` 做雜湊會讓它變成分鐘級，而使用者按下掃描時根本還沒決定要不要用。評估時的雜湊則放在背景 worker，不佔請求路徑。
+
+### 雙軌：PostgreSQL 與 SQLite
+
+`DATABASE_URL` 未設定時走 SQLite 檔案（`extracted_runs/registry.db`），`docker-compose.yml` 注入 PostgreSQL 連線字串。因此**模型定義只能用 SQLAlchemy 通用型別**（`JSON`/`Float`/`String`）；`JSONB`、`ARRAY` 只有 Postgres 有，用了就毀掉雙軌。
+
+好處是本機開發、CI 與 pytest 全部零設定；代價是「CI 跑的不完全等於出貨的」，所以 CI 另有一輪把 `DATABASE_URL` 指向 Postgres service container 的執行，外加一個會因失敗而中斷的建表檢查。
+
+### 資料庫是可選的（這是「附加層」的實作定義）
+
+上傳一顆模型不該因為 PostgreSQL 還沒暖機完成而失敗。因此：
+
+- `init_db()` 重試若干次後放棄，**應用程式照常啟動**，永不拋例外。
+- 所有寫入路徑在不可用時靜默略過，且每個寫入函式都吞掉自己的例外。
+- 讀取端點回 **503 + `dependency_unavailable`**，不是 500——那不是伺服器出錯，是可選相依不在。前端據此顯示「登錄簿離線」而不是紅色錯誤。
+- `/api/registry/stats` 是唯一不做這個檢查的端點：它是前端判斷登錄簿在不在的依據，自己絕不能因資料庫掛掉而失敗（執行期失敗時回 200 + `available: false`）。
+
+**「啟動時連不上」與「跑到一半才掛掉」是兩條不同的路徑**，第二條很容易被漏掉：`is_available()` 只反映啟動當下的狀態，資料庫之後才死掉時那個旗標仍是 True，查詢會一路打到 driver 才炸開，最後被通用 handler 收成 HTTP 500 `internal_error`。這是實測抓到的缺陷——`docker compose stop db` 之後 `/api/registry/weights` 回的是 500。
+
+修法是把連線層級的失敗包成具名的 `RegistryUnavailable`（在 `session_scope` 內攔截 `SQLAlchemyError`），由 `main.py` 註冊的 handler 翻成 503；同時把 `_AVAILABLE` 拉下來，後續請求走快路徑而不必每次等 TCP 逾時。
+
+**資料庫回來後會自動恢復**：`_require_db()` 在不可用時先試 `init_db(retries=1)`，成功就繼續。否則使用者得重啟整個應用才能再用登錄簿，而那與「資料庫是可選相依」的主張矛盾。實測 `docker compose stop db` → 503 → `docker compose start db` → 無需重啟應用即恢復 200，且資料完整。
+
+`tests/test_registry_routes.py::test_runtime_failure_is_503_not_500` 釘住這條路徑。連帶地，測試用的 `disable_for_tests()` 必須設一個獨立的 `_FORCE_OFFLINE` 旗標而不是單純把 `_AVAILABLE` 設 False——否則自動重連會成功，降級路徑根本測不到。
+
+三個寫入接點：`sessions.py` 的兩條上傳路徑、`library_scanner.register()`、`evaluation_service._process_job()` 完成時。**全部在鎖之外**——資料庫可能在網路彼端，在 `SESSIONS_LOCK` / `EVAL_JOBS_LOCK` 內等待往返會讓所有推論請求排隊。
+
+> 開發時漏掉 `library_scanner` 那個接點，單元測試全過（它們直接測 service 層），是 E2E 抓出來的：「權重已入帳」直接失敗。這正是端到端測試要對照**外部可驗證事實**而非後端自己欄位的理由。
+
+啟動還原時會補寫尚未入帳的評估（`record_evaluation` 以 `job_id` upsert），讓「評估完成當下資料庫剛好不可用」能自我修復。
+
+### 刻意不引入 Alembic
+
+schema 用 `create_all()` 建立，日後只做**加欄位**的相容變更。對單機、單使用者、資料可重建（重新掃描＋重跑評估）的工具，一套 migration 框架的維護成本高於它解決的問題。`schema_meta` 表記版號，未來若真的需要破壞性變更，至少能明確偵測並要求使用者重建，而不是靜默給出錯誤結果。
+
+## 11. Micro-Accuracy（Jaccard index）
+
+公式依《效能指標定義與評測方法》§2 的 TN=0 簡化定義（物件偵測的無效背景框數無限且不可統計）：
+
+```
+Precision = TP / (TP + FP)
+Recall    = TP / (TP + FN)
+F1        = 2·P·R / (P + R)
+Accuracy  = TP / (TP + FP + FN) = 1 / (1/P + 1/R − 1)
+```
+
+最後一項就是 Micro-Accuracy / Jaccard index——TN=0 時，準確率的定義自然化簡成交集除以聯集，兩個名字指的是同一個量。
+
+「Micro」是先把所有類別的 TP/FP/FN **加總**再相除，而不是各類別先算比率再平均（後者是 macro）。本資料集的 Scale_Insect 有 1,586 個框、Black_Spot 只有 25 個，macro 會讓後者擁有與前者相同的話語權；micro 反映的是整個測試集上的整體正確比例。
+
+### 資料來源與**已知落差**
+
+TP/FP/FN 取自 ultralytics `val()` 累積的混淆矩陣（`results.confusion_matrix.matrix`，於 `finalize_metrics()` 中無條件指派）。矩陣是 `(nc+1)×(nc+1)`，慣例 `matrix[預測類別, 真實類別]`，最後一列／行是 background。
+
+**該矩陣的配對門檻是 ultralytics 的預設值 conf=0.25 / IoU=0.45，而指標定義文件寫的是 IoU ≥ 0.5。** 這 0.05 的落差無法在不改寫 ultralytics 內部呼叫的前提下消除——`process_batch` 的 `iou_thres` 在 `models/yolo/detect/val.py` 中是寫死的，而為了它去 monkeypatch 套件內部，違反本專案「不與 ultralytics 內部細節耦合」的既有原則。
+
+因此選擇**把實際使用的門檻一起存進每一筆紀錄**（`conf_threshold` / `iou_threshold` 兩欄），並在 UI 與報告中明寫，而不是宣稱 0.5 卻用 0.45 去算。這是誠實界定範圍，不是疏漏。
+
+同樣重要的是：**Micro-Accuracy 是門檻相依的單點量測，mAP 是對所有門檻積分的曲線下面積**，兩者不可直接並列解讀。UI 與報告都標註了這一點。
+
+### 正確性如何被證明
+
+- `tests/test_micro_accuracy.py` 餵手算過答案的合成矩陣（完美→1.0、全錯→0.0、含 background、全零→`None`、指定 nc…）。
+- **恆等式交叉驗算**：對同一組 TP/FP/FN，`TP/(TP+FP+FN)` 與 `1/(1/P + 1/R − 1)` 必須給出同一個數字。兩條算式完全不同，任何一邊寫錯（例如 FP/FN 的行列取反）都會立刻失敗。實測兩邊都是 0.1934。
+- **E2E 的硬不變量**：`TP + FN` 必須等於該 split 的標註框總數。每個 GT 框必定落在其真實類別那一欄的某一格（配對到就落 `M[預測,真實]`、沒配對到就落 `M[background,真實]`），所以真實類別各欄的總和就是 GT 總數。實測 777 + 1,523 = 2,300，與 E2E 自己數出的 2,300 相符。
+
+> 這條不變量第一次跑是 2,300 vs 2,302，差 2。追下去發現 v5 資料集的 `test_0175.txt` 有 4 列但只有 2 列相異，而 ultralytics 在載入標註時會做 `np.unique(lb, axis=0)`。**不變量與實作都是對的，錯的是 E2E 的數法**——E2E 已改為去重後計數，並把這件事寫進註解。
+
+分母為 0 時回 `None` 而不是 0.0：「沒有東西可算」與「算出來是零」是兩件不同的事，混為一談會在帳本裡留下假的 0 分紀錄。
+
+## 12. 已知限制
 
 - E2E 測試有兩支，都需要後端已在執行、且在缺素材時優雅跳過；CI 僅涵蓋單元測試與前端編譯檢查，不含端到端流程。
-  `e2e_tests/e2e_local_library.py` 是主力，用 `LocalLibrary/` 內的真實檔案跑完十個階段（掃描唯讀性、勾選載入、使用者檔案指紋、指標圖、推論對照真實標註、資料集分析對照 ZIP 實際成員數、ONNX/TFLite 匯出、刪除安全性）；`e2e_tests/e2e_test.py` 是早期的上傳流程煙霧測試，需要 `E2E_ASSETS_DIR` 指向特定佈局的素材夾。
+  `e2e_tests/e2e_local_library.py` 是主力，用 `LocalLibrary/` 內的真實檔案跑完 16 個階段（API 信封契約、掃描唯讀性、勾選載入、使用者檔案指紋、指標圖、推論對照真實標註、資料集分析對照 ZIP 實際成員數、ONNX/TFLite 匯出、驗證評估、成果報告、登錄簿入帳與雜湊對照、指標交叉驗算、帳本存活性、刪除安全性），實測 98 項全通過、耗時約 94 秒；`e2e_tests/e2e_test.py` 是早期的上傳流程煙霧測試，需要 `E2E_ASSETS_DIR` 指向特定佈局的素材夾。
+- **Micro-Accuracy 的 IoU 門檻是 0.45 而非規格文件的 0.5**，因為它來自 ultralytics 寫死的混淆矩陣參數。實際使用的門檻已隨每筆紀錄存下並在 UI／報告標明，詳見 §11。
+- 登錄簿的排序與「每顆權重的最佳指標」彙總在 **Python 端**做（過濾仍在 SQL）。單機使用者手上數十顆權重的規模下這是划算的取捨；若日後筆數成長到數千，需要改寫成跨方言都成立的 SQL 彙總。
+- 登錄簿**沒有 migration 機制**（刻意，見 §10）。schema 破壞性變更時 `schema_meta` 只會印警告，需要手動刪除資料庫檔案／volume 重建。
+- 刪除 session 或評估 job **不會**連帶刪除登錄簿紀錄，反之亦然——這是刻意的生命週期分離，但也代表登錄簿會單調成長，需要使用者自行從登錄簿分頁清理。
 - 匯出功能只支援 YOLO；SSDLite（`.pth`）的卡片會停用並說明原因（依 `model_arch` 判斷，不能依副檔名——上傳時 `.pth` 會被改名成 `.pt`）。
 - 匯出目前只出 FP32。`quantize` 參數已從 API 打通並用伺服器端白名單驗證，但白名單暫時只含 `32`/`None`：
   ONNX 的 FP16 轉換失敗在 ultralytics 內是**被捕捉並警告**的，等於會靜默交出一個標著 FP16 的 FP32 檔。

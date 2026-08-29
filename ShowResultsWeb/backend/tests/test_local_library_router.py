@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
+from apitest import data, error
 from app.routers import local_library
 from app.services import dataset_manager, library_scanner, session_manager
 
@@ -97,9 +98,7 @@ def _add_dataset_zip(lib, zip_name):
 
 
 def _scan(client):
-    body = client.post("/api/local-library/scan").json()
-    assert body["status"] == "success", body
-    return body
+    return data(client.post("/api/local-library/scan"))
 
 
 def _ids(body, **filters):
@@ -117,10 +116,7 @@ def test_info_returns_path_and_never_registers(client, tmp_path, monkeypatch):
     _make_library(tmp_path, monkeypatch)
 
     for _ in range(3):
-        res = client.get("/api/local-library")
-        assert res.status_code == 200
-        body = res.json()
-        assert body["status"] == "success"
+        body = data(client.get("/api/local-library"))
         assert body["exists"] is True
         assert body["path"].endswith("LocalLibrary")
 
@@ -130,8 +126,7 @@ def test_info_returns_path_and_never_registers(client, tmp_path, monkeypatch):
 
 def test_info_reports_missing_directory(client, tmp_path, monkeypatch):
     monkeypatch.setattr(local_library, "LOCAL_LIBRARY_DIR", tmp_path / "nope")
-    body = client.get("/api/local-library").json()
-    assert body["exists"] is False
+    assert data(client.get("/api/local-library"))["exists"] is False
 
 
 # --- POST /scan：純探索 -------------------------------------------------------
@@ -214,9 +209,9 @@ def test_empty_library_is_not_an_error(client, tmp_path, monkeypatch):
 
 def test_missing_directory_returns_error(client, tmp_path, monkeypatch):
     monkeypatch.setattr(local_library, "LOCAL_LIBRARY_DIR", tmp_path / "nope")
-    body = client.post("/api/local-library/scan").json()
-    assert body["status"] == "error"
-    assert "找不到本機資料夾" in body["message"]
+    res = client.post("/api/local-library/scan")
+    detail = error(res, status_code=422, code="precondition_failed")
+    assert "找不到本機資料夾" in detail["message"]
 
 
 def test_run_weights_not_double_listed_as_loose(client, tmp_path, monkeypatch):
@@ -236,8 +231,8 @@ def test_register_only_loads_selected_items(client, tmp_path, monkeypatch):
     body = _scan(client)
     wanted = next(c for c in body["candidates"] if c["name"] == "wanted")
 
-    res = client.post("/api/local-library/register",
-                      json={"candidate_ids": [wanted["candidate_id"]]}).json()
+    res = data(client.post("/api/local-library/register",
+                      json={"candidate_ids": [wanted["candidate_id"]]}))
 
     assert len(res["registered_sessions"]) == 1
     assert len(session_manager.ACTIVE_SESSIONS) == 1
@@ -254,8 +249,8 @@ def test_register_extracts_zip_run_and_leaves_zip_untouched(client, tmp_path, mo
     before = sorted(p.name for p in lib.iterdir())
 
     body = _scan(client)
-    res = client.post("/api/local-library/register",
-                      json={"candidate_ids": _ids(body)}).json()
+    res = data(client.post("/api/local-library/register",
+                      json={"candidate_ids": _ids(body)}))
 
     assert len(res["registered_sessions"]) == 1
     session = session_manager.ACTIVE_SESSIONS[res["registered_sessions"][0]]
@@ -272,11 +267,11 @@ def test_register_is_idempotent(client, tmp_path, monkeypatch):
     body = _scan(client)
     ids = _ids(body)
 
-    first = client.post("/api/local-library/register", json={"candidate_ids": ids}).json()
+    first = data(client.post("/api/local-library/register", json={"candidate_ids": ids}))
     assert len(first["registered_sessions"]) == 1
     assert len(first["registered_datasets"]) == 1
 
-    second = client.post("/api/local-library/register", json={"candidate_ids": ids}).json()
+    second = data(client.post("/api/local-library/register", json={"candidate_ids": ids}))
     assert second["registered_sessions"] == []
     assert second["registered_datasets"] == []
     assert second["skipped"] == 2
@@ -294,9 +289,8 @@ def test_register_stops_cleanly_at_max_sessions(client, tmp_path, monkeypatch):
     body = _scan(client)
     assert body["total_models"] == 2
 
-    res = client.post("/api/local-library/register", json={"candidate_ids": _ids(body)}).json()
+    res = data(client.post("/api/local-library/register", json={"candidate_ids": _ids(body)}))
 
-    assert res["status"] == "success"
     assert len(res["registered_sessions"]) == 1
     assert len(session_manager.ACTIVE_SESSIONS) == 1
     assert "上限" in res["message"]
@@ -310,7 +304,7 @@ def test_loose_weight_uses_single_weight_source_type(client, tmp_path, monkeypat
     _make_library(tmp_path, monkeypatch, with_run=False, with_dataset=False, loose_weight="best.pt")
 
     body = _scan(client)
-    res = client.post("/api/local-library/register", json={"candidate_ids": _ids(body)}).json()
+    res = data(client.post("/api/local-library/register", json={"candidate_ids": _ids(body)}))
     session = session_manager.ACTIVE_SESSIONS[res["registered_sessions"][0]]
 
     assert session["source_type"] == "single_weight"
@@ -322,7 +316,7 @@ def test_loose_pth_detected_as_ssdlite_without_rename(client, tmp_path, monkeypa
                         loose_weight="best_model.pth")
 
     body = _scan(client)
-    res = client.post("/api/local-library/register", json={"candidate_ids": _ids(body)}).json()
+    res = data(client.post("/api/local-library/register", json={"candidate_ids": _ids(body)}))
     session = session_manager.ACTIVE_SESSIONS[res["registered_sessions"][0]]
 
     assert session["model_arch"] == "ssdlite_mobilenet_v3_large"
@@ -332,16 +326,15 @@ def test_loose_pth_detected_as_ssdlite_without_rename(client, tmp_path, monkeypa
 
 def test_register_rejects_empty_selection(client, tmp_path, monkeypatch):
     _make_library(tmp_path, monkeypatch)
-    body = client.post("/api/local-library/register", json={"candidate_ids": []}).json()
-    assert body["status"] == "error"
+    error(client.post("/api/local-library/register", json={"candidate_ids": []}),
+          status_code=400, code="validation_error")
 
 
 def test_register_reports_stale_candidate_ids(client, tmp_path, monkeypatch):
     """掃描結果過期後（例如後端重啟）舊的 ID 要誠實回報，而不是靜默無事發生。"""
     _make_library(tmp_path, monkeypatch)
-    body = client.post("/api/local-library/register",
-                       json={"candidate_ids": ["deadbeefcafe"]}).json()
-    assert body["status"] == "success"
+    body = data(client.post("/api/local-library/register",
+                            json={"candidate_ids": ["deadbeefcafe"]}))
     assert "重新掃描" in body["message"]
 
 
@@ -352,7 +345,7 @@ def test_registered_sessions_are_not_persisted(client, tmp_path, monkeypatch):
     _make_library(tmp_path, monkeypatch, with_dataset=False)
 
     body = _scan(client)
-    res = client.post("/api/local-library/register", json={"candidate_ids": _ids(body)}).json()
+    res = data(client.post("/api/local-library/register", json={"candidate_ids": _ids(body)}))
     assert len(res["registered_sessions"]) == 1
 
     if sessions_file.exists():

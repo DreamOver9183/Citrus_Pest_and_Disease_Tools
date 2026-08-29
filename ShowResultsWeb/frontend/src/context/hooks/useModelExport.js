@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import axios from 'axios';
+import { apiGet, apiPost, apiDelete, errorMessage } from '../../api/client';
 
 // 模型匯出的「耐久」狀態，由 Provider 掛載一次。
 //
@@ -31,10 +31,7 @@ export const useModelExport = () => {
 
   const fetchCapabilities = useCallback(async () => {
     try {
-      const res = await axios.get('/api/export/capabilities');
-      if (res.data.status === 'success') {
-        setExportCapabilities(res.data);
-      }
+      setExportCapabilities(await apiGet('/export/capabilities'));
     } catch (err) {
       console.error('[useModelExport] Error fetching capabilities:', err);
     } finally {
@@ -46,10 +43,8 @@ export const useModelExport = () => {
   // 因此重新整理頁面不會弄丟已經轉好的檔案。
   const fetchAllJobs = useCallback(async () => {
     try {
-      const res = await axios.get('/api/export/jobs');
-      if (res.data.status === 'success') {
-        setExportJobs(res.data.jobs || {});
-      }
+      const data = await apiGet('/export/jobs');
+      setExportJobs(data.jobs || {});
     } catch (err) {
       console.error('[useModelExport] Error fetching export jobs:', err);
     }
@@ -86,10 +81,10 @@ export const useModelExport = () => {
 
     const tick = async () => {
       try {
-        const res = await axios.get('/api/export/jobs?active=1');
+        const polled = await apiGet('/export/jobs?active=1');
         if (cancelledRef.current) return;
-        if (res.data.status === 'success') {
-          const active = res.data.jobs || {};
+        {
+          const active = polled.jobs || {};
           // 伺服器是唯一真相來源：先合併進行中的，再對「不在 active 清單裡」的
           // 舊 job 補抓一次終態。絕不從計時器推導完成與否 —— 計時器被凍結只會
           // 延遲更新，不會讓狀態出錯。
@@ -110,9 +105,9 @@ export const useModelExport = () => {
           await Promise.all(
             finished.map(async (jobId) => {
               try {
-                const one = await axios.get(`/api/export/${jobId}`);
-                if (!cancelledRef.current && one.data.status === 'success') {
-                  setExportJobs((prev) => ({ ...prev, [jobId]: one.data.job }));
+                const one = await apiGet(`/export/${jobId}`);
+                if (!cancelledRef.current && one.job) {
+                  setExportJobs((prev) => ({ ...prev, [jobId]: one.job }));
                 }
               } catch {
                 // job 可能已被刪除，忽略
@@ -160,26 +155,19 @@ export const useModelExport = () => {
   const startExport = async (sessionId, format) => {
     setExportError(null);
     try {
-      const formData = new FormData();
-      formData.append('session_id', sessionId);
-      formData.append('format', format);
-      const res = await axios.post('/api/export', formData);
-      if (res.data.status === 'success') {
-        const job = res.data.job;
-        setExportJobs((prev) => ({ ...prev, [job.job_id]: job }));
-        return true;
-      }
-      setExportError(res.data.message || '匯出失敗');
+      const { job } = await apiPost('/export', { session_id: sessionId, format });
+      setExportJobs((prev) => ({ ...prev, [job.job_id]: job }));
+      return true;
     } catch (err) {
       console.error('[useModelExport] Error starting export:', err);
-      setExportError(err.response?.data?.detail || err.message || '連線後端 API 失敗');
+      setExportError(errorMessage(err, '匯出失敗'));
+      return false;
     }
-    return false;
   };
 
   const deleteExportJob = async (jobId) => {
     try {
-      await axios.post(`/api/export/${jobId}/delete`);
+      await apiDelete(`/export/${jobId}`);
       setExportJobs((prev) => {
         const next = { ...prev };
         delete next[jobId];

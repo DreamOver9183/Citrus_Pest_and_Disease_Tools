@@ -102,7 +102,8 @@
     <thead>
       <tr>
         <th>模型</th><th>資料集 / Split</th><th>影像數</th>
-        <th>mAP@50</th><th>mAP@50-95</th><th>Precision</th><th>Recall</th><th>耗時</th>
+        <th>mAP@50</th><th>mAP@50-95</th><th>Precision</th><th>Recall</th>
+        <th>F1</th><th>Micro-Acc</th><th>耗時</th>
       </tr>
     </thead>
     <tbody>
@@ -115,11 +116,51 @@
         <td>{{ '%.4f' % v.overall.map50_95 if v.overall.map50_95 is not none else '—' }}</td>
         <td>{{ '%.4f' % v.overall.precision if v.overall.precision is not none else '—' }}</td>
         <td>{{ '%.4f' % v.overall.recall if v.overall.recall is not none else '—' }}</td>
+        {# 這兩欄是後加的：本功能之前產生的 manifest 沒有這些鍵，
+           用 .get() 而不是屬性存取，缺鍵時得到 none 而不是渲染期例外。 #}
+        <td>{{ '%.4f' % v.overall.get('f1') if v.overall.get('f1') is not none else '—' }}</td>
+        <td>{{ '%.4f' % v.micro.get('micro_accuracy') if v.micro.get('micro_accuracy') is not none else '—' }}</td>
         <td>{{ '%.0f s' % v.elapsed_seconds if v.elapsed_seconds else '—' }}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
+
+  {# Micro-Accuracy 與 mAP 不是同一類指標，並列在同一張表裡就必須把差異講清楚，
+     否則讀者會直接比較兩個數字的大小。 #}
+  {% set micro_views = views | selectattr('micro') | rejectattr('micro.micro_accuracy', 'none') | list %}
+  {% if micro_views %}
+  <p class="note">
+    <b>Micro-Accuracy（Jaccard index）</b>定義為
+    <code>TP / (TP + FP + FN)</code>，等價於 <code>1 / (1/Precision + 1/Recall − 1)</code>；
+    物件偵測的無效背景框數無限且不可統計，故一律簡化為 TN = 0。
+    「微平均」指先加總所有類別的 TP/FP/FN 再相除，因此框數多的類別權重較高。
+    <br>
+    <b>此指標為門檻相依</b>：TP/FP/FN 取自固定門檻
+    （conf ≥ {{ micro_views[0].micro.conf_threshold }}、IoU ≥ {{ micro_views[0].micro.iou_threshold }}）
+    下累積的混淆矩陣，而 mAP 是對所有信心門檻積分的曲線下面積。
+    兩者衡量的不是同一件事，<b>不可直接比較數值大小</b>。
+  </p>
+  <table>
+    <thead>
+      <tr><th>模型</th><th>TP</th><th>FP</th><th>FN</th>
+          <th>微平均 Precision</th><th>微平均 Recall</th><th>Micro-Accuracy</th></tr>
+    </thead>
+    <tbody>
+    {% for v in micro_views %}
+      <tr>
+        <td>{{ v.session_name }}</td>
+        <td>{{ '{:,}'.format(v.micro.tp) }}</td>
+        <td>{{ '{:,}'.format(v.micro.fp) }}</td>
+        <td>{{ '{:,}'.format(v.micro.fn) }}</td>
+        <td>{{ '%.4f' % v.micro.get('micro_precision') if v.micro.get('micro_precision') is not none else '—' }}</td>
+        <td>{{ '%.4f' % v.micro.get('micro_recall') if v.micro.get('micro_recall') is not none else '—' }}</td>
+        <td><b>{{ '%.4f' % v.micro.micro_accuracy }}</b></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
 
   {# --- 資料集摘要 --- #}
   {% if dataset %}
@@ -176,7 +217,7 @@
       <thead>
         <tr>
           <th>類別</th><th>AP@50</th><th>AP@50-95</th><th>Precision</th><th>Recall</th>
-          <th>標註框數</th><th>中位框面積</th><th>極小框佔比</th>
+          <th>Accuracy</th><th>標註框數</th><th>中位框面積</th><th>極小框佔比</th>
         </tr>
       </thead>
       <tbody>
@@ -187,6 +228,7 @@
           <td>{{ '%.4f' % r.ap50_95 }}</td>
           <td>{{ '%.4f' % r.precision }}</td>
           <td>{{ '%.4f' % r.recall }}</td>
+          <td>{{ '%.4f' % r.get('accuracy') if r.get('accuracy') is not none else '—' }}</td>
           <td>{{ '{:,}'.format(r.boxes) if r.boxes is not none else '—' }}</td>
           <td>{{ '%.3f%%' % r.median_area_pct if r.median_area_pct is not none else '—' }}</td>
           <td>{{ '%.1f%%' % r.tiny_pct if r.tiny_pct is not none else '—' }}</td>
@@ -255,6 +297,7 @@
     <li>推論在 {{ env.device | upper }} 上執行，時間數據不代表其他硬體（尤其是邊緣裝置）的表現。</li>
     <li>標註框數少的類別，其 AP 的統計不確定性較高，解讀時應一併參考該類別的框數欄位。</li>
     <li>評估僅涵蓋 YOLO 架構；SSDLite 需要另一套評估流程。</li>
+    <li>Micro-Accuracy 的配對門檻取自 Ultralytics 混淆矩陣的預設值（IoU ≥ 0.45），與指標定義文件所述的 IoU ≥ 0.5 略有差異；實際使用的門檻已如上表註明。</li>
   </ul>
 
   <footer>

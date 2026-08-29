@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import axios from 'axios';
+import { apiGet, apiPost, errorMessage } from '../../api/client';
 
 // 本機資料夾掃描的「耐久」狀態，由 Provider 掛載一次。
 //
@@ -25,11 +25,9 @@ export const useLocalLibrary = () => {
 
   const fetchLibraryInfo = useCallback(async () => {
     try {
-      const res = await axios.get('/api/local-library');
-      if (res.data.status === 'success') {
-        setLibraryPath(res.data.path || '');
-        setLibraryExists(!!res.data.exists);
-      }
+      const data = await apiGet('/local-library');
+      setLibraryPath(data.path || '');
+      setLibraryExists(!!data.exists);
     } catch (err) {
       console.error('[useLocalLibrary] Error fetching library info:', err);
     } finally {
@@ -51,23 +49,17 @@ export const useLocalLibrary = () => {
     try {
       // 刻意不設 timeout：大型資料夾走訪與資料集分析可能耗時數十秒，axios 預設的
       // 0（不逾時）才是正確行為，與 useDatasetState 的分析請求一致。
-      const res = await axios.post('/api/local-library/scan');
-
-      if (res.data.status === 'success') {
-        const found = res.data.candidates || [];
-        setCandidates(found);
-        setLastScanMessage(res.data.message || null);
-        // 預設勾選所有尚未載入的項目——使用者最常見的意圖是「全都要」，
-        // 不想要的再取消勾選，比從零開始逐一勾選省事。
-        setSelectedIds(found.filter((c) => !c.already_registered).map((c) => c.candidate_id));
-        return { success: true };
-      }
-      setScanError(res.data.message || '掃描失敗');
+      const data = await apiPost('/local-library/scan');
+      const found = data.candidates || [];
+      setCandidates(found);
+      setLastScanMessage(data.message || null);
+      // 預設勾選所有尚未載入的項目——使用者最常見的意圖是「全都要」，
+      // 不想要的再取消勾選，比從零開始逐一勾選省事。
+      setSelectedIds(found.filter((c) => !c.already_registered).map((c) => c.candidate_id));
+      return { success: true };
     } catch (err) {
       console.error('[useLocalLibrary] Error scanning local library:', err);
-      setScanError(
-        err.response?.data?.detail || err.message || '連線後端 API 失敗，請確認 FastAPI 服務是否運行'
-      );
+      setScanError(errorMessage(err, '掃描失敗'));
     } finally {
       inFlightRef.current = false;
       setIsScanning(false);
@@ -101,33 +93,28 @@ export const useLocalLibrary = () => {
     setScanError(null);
 
     try {
-      const res = await axios.post('/api/local-library/register', { candidate_ids: selectedIds });
+      const data = await apiPost('/local-library/register', { candidate_ids: selectedIds });
 
-      if (res.data.status === 'success') {
-        setLastRegisterMessage(res.data.message || null);
-        // 後端只在註冊成功時才把項目標成已載入，因此重新標記本地清單，
-        // 讓使用者立刻看到哪些已經進去了，不必再掃一次。
-        const justRegistered = new Set(selectedIds);
-        setCandidates((prev) =>
-          prev.map((c) =>
-            justRegistered.has(c.candidate_id) && !(res.data.failed || []).includes(c.name)
-              ? { ...c, already_registered: true }
-              : c
-          )
-        );
-        setSelectedIds([]);
-        return {
-          success: true,
-          sessions: res.data.sessions || {},
-          datasets: res.data.datasets || {},
-        };
-      }
-      setScanError(res.data.message || '載入失敗');
+      setLastRegisterMessage(data.message || null);
+      // 後端只在註冊成功時才把項目標成已載入，因此重新標記本地清單，
+      // 讓使用者立刻看到哪些已經進去了，不必再掃一次。
+      const justRegistered = new Set(selectedIds);
+      setCandidates((prev) =>
+        prev.map((c) =>
+          justRegistered.has(c.candidate_id) && !(data.failed || []).includes(c.name)
+            ? { ...c, already_registered: true }
+            : c
+        )
+      );
+      setSelectedIds([]);
+      return {
+        success: true,
+        sessions: data.sessions || {},
+        datasets: data.datasets || {},
+      };
     } catch (err) {
       console.error('[useLocalLibrary] Error registering selection:', err);
-      setScanError(
-        err.response?.data?.detail || err.message || '連線後端 API 失敗，請確認 FastAPI 服務是否運行'
-      );
+      setScanError(errorMessage(err, '載入失敗'));
     } finally {
       inFlightRef.current = false;
       setIsRegistering(false);

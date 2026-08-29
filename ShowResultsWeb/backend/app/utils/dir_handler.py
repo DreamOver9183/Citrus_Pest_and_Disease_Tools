@@ -68,7 +68,10 @@ def index_yolo_runs_in_dir(root_path: str) -> list:
                 results_png = os.path.join(root, "results.png").replace("\\", "/")
                 confusion_matrix = os.path.join(root, "confusion_matrix.png").replace("\\", "/")
 
-                # 蒐集此模型實體規格
+                # 蒐集此模型實體規格。
+                # hyperparameters 帶的是**完整**的 args.yaml：上面那三個 get() 只挑了
+                # 消融看板要顯示的欄位，其餘（lr0/mosaic/patience…）正是權重登錄簿要記的
+                # 東西。這裡不重讀檔案，直接把已經 safe_load 出來的 dict 一併回傳。
                 found_runs.append({
                     "dir_path": root.replace("\\", "/"),
                     "weights_path": best_pt_path.replace("\\", "/"),
@@ -77,6 +80,7 @@ def index_yolo_runs_in_dir(root_path: str) -> list:
                     "optimizer": optimizer,
                     "model_cfg": model_name_cfg,
                     "metrics_summary": metrics,
+                    "hyperparameters": hyperparams,
                     "results_png": results_png if os.path.exists(results_png) else None,
                     "confusion_matrix": confusion_matrix if os.path.exists(confusion_matrix) else None
                 })
@@ -107,6 +111,7 @@ def index_single_weight_in_place(file_path: str) -> dict:
         "optimizer": "N/A",
         "model_cfg": "N/A",
         "metrics_summary": {},
+        "hyperparameters": {},
         "results_png": None,
         "confusion_matrix": None,
     }

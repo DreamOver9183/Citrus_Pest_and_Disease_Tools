@@ -1,4 +1,32 @@
 services:
+  # 權重登錄簿的資料庫。
+  #
+  # 這是本專案唯一的第二個容器。`docker compose up --build` 仍然是唯一需要的指令——
+  # healthcheck + depends_on 讓應用等到資料庫真正可以接受連線才啟動，而應用端另外還有
+  # 一層重試（app/db/engine.py），所以就算 healthcheck 通過後仍有極短的不可連線窗口
+  # 也不會讓啟動失敗。
+  #
+  # 刻意**不指定 platform**：postgres:16-alpine 有 arm64 映像，讓它在 ARM 主機上跑原生
+  # 比跟著應用一起被逼進 amd64 模擬快得多（應用釘 amd64 是 TFLite 的限制，與資料庫無關）。
+  db:
+    image: postgres:16-alpine
+    container_name: citrus_registry_db
+    environment:
+      - POSTGRES_USER=citrus
+      - POSTGRES_PASSWORD=citrus
+      - POSTGRES_DB=citrus
+    volumes:
+      # named volume 而非 bind mount：Postgres 對資料目錄的權限與檔案系統語意很敏感，
+      # 掛到 Windows 主機目錄上會出問題。
+      - citrus-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U citrus -d citrus"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
   citrus-detection-app:
     build:
       context: .
@@ -8,6 +36,9 @@ services:
     # linux/arm64，匯出會斷言失敗且套件根本裝不起來，因此明確釘住平台。
     platform: linux/amd64
     container_name: citrus_detection_container
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
@@ -27,4 +58,10 @@ services:
       # 導致 SAMPLES_DIR 變成 /Datasets/samples 而非實際掛載點 /app/Datasets/samples。
       # 明確指定 PROJECT_ROOT 讓樣本與報表路徑對齊容器內的實際結構。
       - PROJECT_ROOT=/app
+      # 權重登錄簿。未設定此變數時 config.py 會落回 SQLite 檔案（本機開發的預設路徑），
+      # 容器內則明確走 db 服務。driver 用 psycopg（v3），已列在 requirements-docker.txt。
+      - DATABASE_URL=postgresql+psycopg://citrus:citrus@db:5432/citrus
     restart: unless-stopped
+
+volumes:
+  citrus-db-data:

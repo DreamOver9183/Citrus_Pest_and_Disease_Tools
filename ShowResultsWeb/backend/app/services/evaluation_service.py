@@ -44,6 +44,7 @@ from app.core.config import (
     MAX_EVAL_JOBS,
     MAX_QUEUED_EVALS,
 )
+from app.services import registry_service
 from app.services.dataset_resolver import DatasetUnavailable, ResolvedSplit, resolve_split
 
 JOB_SCHEMA_VERSION = 1
@@ -61,6 +62,13 @@ LOG_TAIL_MAXLEN = 40
 # 極小物件的門檻：框面積佔整張影像的比例。這個資料集的 Canker 有 31.5% 的框落在此
 # 門檻以下，而 Sooty_Mold 一個也沒有——正是 P2 檢測層要解決的那個分布。
 TINY_BOX_AREA_RATIO = 0.001
+
+# 混淆矩陣的累積門檻。ultralytics 的 DetectionValidator 用 confusion_matrix_conf
+#（預設 0.25）與 process_batch(iou_thres=0.45)。這兩個值必須跟著 Micro-Accuracy 一起
+# 被記錄下來——Jaccard index 是**門檻相依**的單點量測，脫離門檻就無法解讀，也無法
+# 跨紀錄比較。mAP 沒有這個問題（它對所有門檻積分），兩者不可並列解讀。
+CM_CONF_THRESHOLD = 0.25
+CM_IOU_THRESHOLD = 0.45
 
 STAGES = {
     "queued": ("等待中", 0),
@@ -157,6 +165,142 @@ def compare_vocabularies(model_names: Dict[int, str], dataset_names: List[str]) 
             f"類別數相同但有 {len(differences)} 個名稱不一致。指標仍以索引配對計算，"
             "解讀時請確認兩邊指的是同一批類別。"
         ),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# 邊界框級別的 TP/FP/FN 指標（依《效能指標定義與評測方法》§2）
+# --------------------------------------------------------------------------- #
+#
+# 該文件對影像辨識模組的定義（物件偵測任務中 TN 無限且不可統計，一律簡化為 TN = 0）：
+#
+#     Precision = TP / (TP + FP)
+#     Recall    = TP / (TP + FN)
+#     F1-Score  = 2 · Precision · Recall / (Precision + Recall)
+#     Accuracy  = TP / (TP + FP + FN) = 1 / (1/Precision + 1/Recall − 1)
+#
+# 最後一項就是使用者要的 **Micro-Accuracy（Jaccard index）**——當 TN = 0 時，
+# 準確率的定義自然化簡成交集除以聯集。兩個名字指的是同一個量。
+#
+# 「Micro（微平均）」的意思是先把所有類別的 TP/FP/FN **加總**再相除，而不是各類別先
+# 算出比率再平均（後者是 macro）。這個差別在類別數量極不均衡時很大：本資料集的
+# Sooty_Mold 與 Canker 框數差一個數量級，macro 會讓框數極少的類別擁有和主力類別相同的
+# 話語權。micro 反映的是「整個測試集上的整體正確比例」。
+
+
+def accuracy_from_precision_recall(precision, recall):
+    """由 P/R 反推 Accuracy：1 / (1/P + 1/R − 1)。
+
+    這是上面那條恆等式的另一半，存在的意義是**交叉驗算**：對同一組 TP/FP/FN，
+    它必須與 TP/(TP+FP+FN) 給出相同的值。單元測試用它證明兩條路徑一致。
+    P 或 R 為 0 時無定義（分母會爆），回 None。
+    """
+    try:
+        p, r = float(precision), float(recall)
+    except (TypeError, ValueError):
+        return None
+    if p <= 0 or r <= 0:
+        return None
+    denom = (1.0 / p) + (1.0 / r) - 1.0
+    if denom <= 0:
+        return None
+    return round(1.0 / denom, 4)
+
+
+def _safe_ratio(numerator, denominator):
+    return round(numerator / denominator, 4) if denominator > 0 else None
+
+
+def micro_accuracy_from_matrix(matrix, nc=None, class_names=None):
+    """由 ultralytics 的混淆矩陣算出邊界框級別的 TP/FP/FN 與四項衍生指標。
+
+    矩陣是 `(nc+1) x (nc+1)`，慣例為 `matrix[預測類別, 真實類別]`，最後一列／行是
+    background（已於 ultralytics 8.4.122 的 `ConfusionMatrix.process_batch` 確認）。
+    對每個**真實**類別 i：
+
+        TP_i = M[i][i]
+        FP_i = ΣM[i][:] − TP_i     （含誤判成別類，以及對到 background 的多餘預測）
+        FN_i = ΣM[:][i] − TP_i     （含漏檢，以及被判成別類的框）
+
+    一個分類錯誤的框同時計入 FP 與 FN，這是定義使然，不是重複計算。
+
+    分母為 0（完全沒有預測也沒有標註）時回 `None` 而不是 0.0——「沒有東西可算」與
+    「算出來是零」是兩件不同的事，混為一談會在帳本裡留下假的 0 分紀錄。
+
+    **門檻的誠實聲明**：TP/FP/FN 來自 ultralytics 累積的混淆矩陣，其配對門檻是該套件的
+    預設值 conf=0.25 / IoU=0.45，而指標定義文件 §2 寫的是 IoU ≥ 0.5。這 0.05 的落差
+    無法在不改寫 ultralytics 內部呼叫的前提下消除（`process_batch` 的 iou_thres 在
+    `models/yolo/detect/val.py` 中是寫死的），因此選擇**把實際使用的門檻一起存進每一筆
+    紀錄**（conf_threshold / iou_threshold 兩欄），而不是宣稱 0.5 卻用 0.45 去算。
+    見 architecture.md §10 的「已知落差」。
+
+    刻意寫成不依賴 numpy 的純函式：它是單元測試的接縫，測試餵手算過答案的合成矩陣
+    即可驗證，不需要真實權重與影像（兩者都被 .gitignore 排除）。
+    """
+    empty = {
+        "micro_accuracy": None, "micro_precision": None,
+        "micro_recall": None, "micro_f1": None,
+        "tp": 0, "fp": 0, "fn": 0,
+        "conf_threshold": CM_CONF_THRESHOLD, "iou_threshold": CM_IOU_THRESHOLD,
+        "per_class": [],
+    }
+    if matrix is None:
+        return empty
+    try:
+        rows = [[float(v) for v in row] for row in matrix]
+    except (TypeError, ValueError):
+        return empty
+    size = len(rows)
+    if size == 0 or any(len(row) != size for row in rows):
+        return empty
+
+    # 未指定 nc 時，最後一列／行是 background，其餘才是真實類別
+    real = size - 1 if nc is None else max(0, min(int(nc), size))
+
+    names = list(class_names or [])
+    total_tp = total_fp = total_fn = 0.0
+    per_class = []
+    for i in range(real):
+        tp = rows[i][i]
+        fp = sum(rows[i]) - tp
+        fn = sum(rows[r][i] for r in range(size)) - tp
+        total_tp += tp
+        total_fp += fp
+        total_fn += fn
+        precision = _safe_ratio(tp, tp + fp)
+        recall = _safe_ratio(tp, tp + fn)
+        f1 = (
+            round(2 * precision * recall / (precision + recall), 4)
+            if precision and recall and (precision + recall) > 0
+            else None
+        )
+        per_class.append({
+            "class_id": i,
+            "name": names[i] if i < len(names) else str(i),
+            "tp": int(tp), "fp": int(fp), "fn": int(fn),
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            # 逐類別的 Accuracy，也就是該類別自己的 Jaccard index
+            "accuracy": _safe_ratio(tp, tp + fp + fn),
+        })
+
+    micro_precision = _safe_ratio(total_tp, total_tp + total_fp)
+    micro_recall = _safe_ratio(total_tp, total_tp + total_fn)
+    micro_f1 = (
+        round(2 * micro_precision * micro_recall / (micro_precision + micro_recall), 4)
+        if micro_precision and micro_recall and (micro_precision + micro_recall) > 0
+        else None
+    )
+    return {
+        "micro_accuracy": _safe_ratio(total_tp, total_tp + total_fp + total_fn),
+        "micro_precision": micro_precision,
+        "micro_recall": micro_recall,
+        "micro_f1": micro_f1,
+        "tp": int(total_tp), "fp": int(total_fp), "fn": int(total_fn),
+        "conf_threshold": CM_CONF_THRESHOLD,
+        "iou_threshold": CM_IOU_THRESHOLD,
+        "per_class": per_class,
     }
 
 
@@ -282,6 +426,16 @@ def _run_validation(job_dir: Path, weights: str, data_yaml: Path, log_sink: dequ
         names = getattr(results, "names", None) or model_names
         name_list = [names[k] for k in sorted(names)] if names else []
 
+        # Micro-Accuracy 的來源。ultralytics 在 finalize_metrics() 無條件把驗證器的
+        # ConfusionMatrix 掛到 metrics 上（8.4.122 已確認），但用 getattr 取值仍是必要的：
+        # 這個屬性不在 DetMetrics 的類別定義裡，換一個 ultralytics 版本就可能沒有。
+        # 取不到時降級成「沒有這項指標」，而不是讓整場評估失敗。
+        cm = getattr(results, "confusion_matrix", None)
+        micro = micro_accuracy_from_matrix(
+            getattr(cm, "matrix", None), class_names=name_list
+        )
+        micro_by_class = {entry["class_id"]: entry for entry in micro["per_class"]}
+
         per_class = []
         for i, class_idx in enumerate(box.ap_class_index):
             p, r, ap50, ap = box.class_result(i)
@@ -293,17 +447,30 @@ def _run_validation(job_dir: Path, weights: str, data_yaml: Path, log_sink: dequ
                 "recall": round(float(r), 4),
                 "ap50": round(float(ap50), 4),
                 "ap50_95": round(float(ap), 4),
+                # 逐類別 Accuracy（Jaccard）。與上面 ultralytics 的 P/R 不同源：
+                # 那兩個取自 PR 曲線的最佳 F1 點，這個來自固定門檻的混淆矩陣。
+                "accuracy": (micro_by_class.get(idx) or {}).get("accuracy"),
             })
 
         speed = getattr(results, "speed", None) or {}
+        precision = round(float(box.mp), 4)
+        recall = round(float(box.mr), 4)
+        map50 = round(float(box.map50), 4)
+        map50_95 = round(float(box.map), 4)
+        pr_sum = precision + recall
         return {
             "model_names": model_names,
             "overall": {
-                "map50": round(float(box.map50), 4),
-                "map50_95": round(float(box.map), 4),
-                "precision": round(float(box.mp), 4),
-                "recall": round(float(box.mr), 4),
+                "map50": map50,
+                "map50_95": map50_95,
+                "precision": precision,
+                "recall": recall,
+                # F1 由 P/R 導出；fitness 沿用 ultralytics 的加權（0.1·mAP50 + 0.9·mAP50-95），
+                # 刻意不自創權重，才能和 ultralytics 自己印出來的數字對得上。
+                "f1": round(2 * precision * recall / pr_sum, 4) if pr_sum > 0 else 0.0,
+                "fitness": round(0.1 * map50 + 0.9 * map50_95, 4),
             },
+            "micro": micro,
             "per_class": per_class,
             "speed_ms": {k: round(float(v), 2) for k, v in speed.items()},
             "plots": _collect_plots(job_dir / "val"),
@@ -380,8 +547,10 @@ def _job_public(job: Dict[str, Any]) -> Dict[str, Any]:
         "job_id": job.get("job_id"),
         "session_id": job.get("session_id"),
         "session_name": job.get("session_name"),
+        "weight_sha256": job.get("weight_sha256"),
         "dataset_id": job.get("dataset_id"),
         "dataset_name": job.get("dataset_name"),
+        "dataset_format": job.get("dataset_format"),
         "split": job.get("split"),
         "state": job.get("state"),
         "stage": stage,
@@ -395,10 +564,11 @@ def _job_public(job: Dict[str, Any]) -> Dict[str, Any]:
         "image_count": job.get("image_count"),
         "vocab_check": job.get("vocab_check"),
         "overall": job.get("overall"),
-        "per_class": job.get("per_class"),
-        "size_profile": job.get("size_profile"),
-        "speed_ms": job.get("speed_ms"),
-        "plot_urls": job.get("plot_urls"),
+        "micro": job.get("micro"),
+        "per_class": job.get("per_class") or [],
+        "size_profile": job.get("size_profile") or [],
+        "speed_ms": job.get("speed_ms") or {},
+        "plot_urls": job.get("plot_urls") or {},
         "log_tail": list(job.get("log_tail") or []),
     }
 
@@ -458,6 +628,14 @@ def _process_job(job_id: str) -> None:
         job_dir = Path(job["job_dir"])
         log_sink = job["log_tail"]
 
+    # 權重雜湊在**背景執行緒**算，不在 submit 的請求路徑上：一顆 best.pt 動輒數十 MB，
+    # 沒有理由讓使用者按下「開始評估」時多等那段 I/O。放在這裡仍然遠早於 val()，
+    # 也保證是在權重檔還存在的時候算的（整場評估要跑數分鐘，期間 session 可能被刪除）。
+    weight_sha = registry_service.sha256_of_file(weights) if weights else None
+    with EVAL_JOBS_LOCK:
+        if job_id in EVAL_JOBS:
+            EVAL_JOBS[job_id]["weight_sha256"] = weight_sha
+
     resolved: Optional[ResolvedSplit] = None
     try:
         # --- 1. 把資料集變成磁碟上的實體目錄 ---
@@ -506,6 +684,7 @@ def _process_job(job_id: str) -> None:
             if job is None:
                 return
             job["overall"] = outcome["overall"]
+            job["micro"] = outcome.get("micro")
             job["per_class"] = outcome["per_class"]
             job["size_profile"] = profile
             job["speed_ms"] = outcome["speed_ms"]
@@ -519,6 +698,12 @@ def _process_job(job_id: str) -> None:
             job["finished_at"] = _now_iso()
             job["elapsed_seconds"] = round(time.monotonic() - job["_started_monotonic"], 1)
         _write_manifest(job_id)
+
+        # 寫進權重登錄簿。**必須在鎖外**——資料庫可能是網路上的 PostgreSQL，在
+        # EVAL_JOBS_LOCK 內等待網路往返會讓所有輪詢請求跟著卡住。
+        # record_evaluation() 自己吞掉所有例外：登錄簿失敗不該讓一場跑了數分鐘、
+        # 結果已經正確寫進 manifest 的評估被標成失敗。
+        registry_service.record_evaluation(get_job(job_id) or {}, weight_sha)
 
     except DatasetUnavailable as exc:
         _fail(job_id, str(exc))
@@ -627,8 +812,10 @@ def submit_evaluation(session: Dict[str, Any], dataset: Dict[str, Any], split: s
         "job_id": job_id,
         "session_id": session.get("session_id"),
         "session_name": session.get("custom_name") or session.get("session_id") or "model",
+        "weight_sha256": None,
         "dataset_id": dataset.get("dataset_id"),
         "dataset_name": dataset.get("zip_name") or dataset.get("dataset_id"),
+        "dataset_format": dataset.get("format"),
         "split": split,
         "state": "queued",
         "stage": "queued",
@@ -640,6 +827,7 @@ def submit_evaluation(session: Dict[str, Any], dataset: Dict[str, Any], split: s
         "image_count": None,
         "vocab_check": None,
         "overall": None,
+        "micro": None,
         "per_class": None,
         "size_profile": None,
         "speed_ms": None,
@@ -733,4 +921,17 @@ def load_jobs_from_disk() -> None:
         payload["_dataset_stats"] = {}
         with EVAL_JOBS_LOCK:
             EVAL_JOBS[job_id] = payload
+
+    # 補寫登錄簿。用途是自我修復：評估完成當下若資料庫剛好不可用（容器還在暖機、
+    # 或使用者根本沒開 DB），那筆指標就只存在於 manifest 裡。下次啟動時補進去。
+    # record_evaluation() 以 job_id 做 upsert，已入帳的重複呼叫不會產生第二列。
+    with EVAL_JOBS_LOCK:
+        pending = [
+            (dict(job), job.get("weight_sha256"))
+            for job in EVAL_JOBS.values()
+            if job.get("weight_sha256")
+        ]
+    for job, sha in pending:
+        registry_service.record_evaluation(job, sha)
+
     print(f"[EvaluationService] Restored {len(EVAL_JOBS)} evaluation result(s)")
