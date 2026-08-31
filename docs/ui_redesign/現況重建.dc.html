@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@0.395.0/dist/umd/lucide.min.js"></script>
+<style>
+body{margin:0;background:#020510;font-family:'Outfit','Space Grotesk',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#f97316;text-decoration:none}a:hover{color:#fb923c}
+::selection{background:rgba(249,115,22,.3);color:#fff}
+[data-lucide]{display:inline-flex}
+svg.lucide{width:1em;height:1em}
+</style>
+</helmet>
+<div style="position:relative;min-height:100vh;background:#020510;color:#f3f4f6;overflow:hidden">
+<div style="position:absolute;top:-10%;left:-10%;width:50vw;height:50vw;border-radius:9999px;background:rgba(234,88,12,.10);filter:blur(130px);pointer-events:none"></div>
+<div style="position:absolute;top:20%;right:-10%;width:45vw;height:45vw;border-radius:9999px;background:rgba(13,148,136,.08);filter:blur(120px);pointer-events:none"></div>
+<div style="position:absolute;bottom:20%;left:-15%;width:40vw;height:40vw;border-radius:9999px;background:rgba(219,39,119,.06);filter:blur(110px);pointer-events:none"></div>
+<div style="position:absolute;bottom:-10%;right:-5%;width:50vw;height:50vw;border-radius:9999px;background:rgba(79,70,229,.10);filter:blur(150px);pointer-events:none"></div>
+<div style="position:absolute;inset:0;background-image:linear-gradient(to right,rgba(255,255,255,.012) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.012) 1px,transparent 1px);background-size:24px 24px;mask-image:radial-gradient(ellipse 60% 50% at 50% 0%,#000 70%,transparent 100%);pointer-events:none"></div>
+
+<header style="position:sticky;top:0;z-index:40;background:rgba(4,8,23,.85);backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.06);box-shadow:0 25px 50px -12px rgba(0,0,0,.5)">
+<div style="max-width:1280px;margin:0 auto;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px">
+<div style="display:flex;align-items:center;gap:12px">
+<div style="padding:10px;background:linear-gradient(to bottom right,#f97316,#d97706);border-radius:12px;box-shadow:0 0 15px rgba(249,115,22,.25);display:flex;align-items:center;justify-content:center"><i data-lucide="zap" style="font-size:20px;color:#fff"></i></div>
+<div>
+<div style="display:flex;align-items:center;gap:8px">
+<h1 style="margin:0;font-weight:800;color:#fff;letter-spacing:-.02em;font-size:18px">柑橘病蟲害工具包</h1>
+<span style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;background:rgba(249,115,22,.15);color:#fb923c;border:1px solid rgba(249,115,22,.3);padding:2px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:.05em">v3.5 Live</span>
+</div>
+<p style="margin:2px 0 0;font-size:10px;color:#9ca3af;font-family:'JetBrains Mono',monospace;letter-spacing:.02em">Detection · Dataset Analysis · Model Export Toolkit</p>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:24px;padding:10px 20px;background:rgba(2,6,23,.4);border:1px solid rgba(255,255,255,.05);border-radius:16px">
+<div style="display:flex;align-items:center;gap:10px;border-right:1px solid rgba(255,255,255,.05);padding-right:20px">
+<i data-lucide="database" style="font-size:16px;color:#fb923c"></i>
+<div style="font-family:'JetBrains Mono',monospace">
+<div style="font-size:9px;color:#6b7280;text-transform:uppercase">模型庫容量</div>
+<div style="font-size:12px;color:#fff;font-weight:700">2 / 3 Sessions</div>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:10px;border-right:1px solid rgba(255,255,255,.05);padding-right:20px">
+<i data-lucide="cpu" style="font-size:16px;color:#818cf8"></i>
+<div style="font-family:'JetBrains Mono',monospace">
+<div style="font-size:9px;color:#6b7280;text-transform:uppercase">當前推論設備</div>
+<div style="font-size:12px;color:#fff;font-weight:700">CUDA:0 RTX 4060</div>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:8px">
+<span style="position:relative;display:flex;height:8px;width:8px"><span style="position:absolute;display:inline-flex;height:100%;width:100%;border-radius:9999px;background:#34d399;opacity:.75"></span><span style="position:relative;display:inline-flex;border-radius:9999px;height:8px;width:8px;background:#10b981"></span></span>
+<span style="font-size:11px;font-weight:700;color:#34d399">後端服務同步中</span>
+</div>
+</div>
+<nav style="display:flex;flex-wrap:wrap;align-items:center;gap:2px;background:rgba(2,6,23,.7);padding:4px;border-radius:12px;border:1px solid rgba(255,255,255,.08);box-shadow:inset 0 2px 4px rgba(0,0,0,.06)">
+<button onClick="{{ goInit }}" style="{{ tabInit }}"><i data-lucide="activity" style="font-size:14px"></i>模型與裝置</button>
+<button onClick="{{ goMetrics }}" style="{{ tabMetrics }}"><i data-lucide="bar-chart-2" style="font-size:14px"></i>消融分析</button>
+<button onClick="{{ goDemo }}" style="{{ tabDemo }}"><i data-lucide="layers" style="font-size:14px"></i>即時診斷</button>
+<button onClick="{{ goDataset }}" style="{{ tabDataset }}"><i data-lucide="folder-tree" style="font-size:14px"></i>資料集</button>
+<button onClick="{{ goEvaluate }}" style="{{ tabEvaluate }}"><i data-lucide="gauge-circle" style="font-size:14px"></i>驗證評估</button>
+<button onClick="{{ goRegistry }}" style="{{ tabRegistry }}"><i data-lucide="library" style="font-size:14px"></i>權重登錄簿</button>
+</nav>
+</div>
+</header>
+
+<main style="position:relative;z-index:10;min-height:80vh">
+
+<sc-if value="{{ isInit }}" hint-placeholder-val="{{ true }}">
+<div style="max-width:1280px;margin:0 auto;padding:16px 8px;text-align:left">
+<div style="display:grid;grid-template-columns:1fr 2fr;gap:32px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:24px">
+
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.37);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<h3 style="margin:0;font-size:12px;font-weight:700;color:#fff;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:8px"><i data-lucide="hard-drive" style="font-size:16px;color:#fb923c"></i>載入模型權重<span style="width:16px;height:16px;border-radius:9999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.1);font-size:10px;color:#9ca3af;display:inline-flex;align-items:center;justify-content:center;margin-left:4px">?</span></h3>
+<span style="font-size:10px;color:#fb923c;font-family:'JetBrains Mono',monospace;font-weight:700;background:rgba(249,115,22,.1);padding:2px 8px;border-radius:6px">Slot Available</span>
+</div>
+<div style="padding:24px;border-radius:12px;border:2px dashed rgba(255,255,255,.1);text-align:center;min-height:190px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+<div style="padding:12px;background:rgba(255,255,255,.05);border-radius:16px;width:48px;height:48px;display:flex;align-items:center;justify-content:center"><i data-lucide="archive" style="font-size:24px;color:#fb923c"></i></div>
+<div>
+<p style="margin:0;font-size:12px;color:#fff;font-weight:700">拖放模型檔案或 ZIP 訓練成果</p>
+<p style="margin:4px auto 0;font-size:10px;color:#9ca3af;line-height:1.6;max-width:200px">支援 .pt (YOLO), .pth (SSDLite), .onnx, .zip<br>* 檔名含 small 視為 SSDLite-Small 架構</p>
+</div>
+</div>
+<div style="background:rgba(2,6,23,.5);border-radius:12px;padding:16px;border:1px solid rgba(255,255,255,.05);display:flex;flex-direction:column;gap:12px;font-size:12px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="color:#9ca3af;font-weight:500">模型庫使用率</span><span style="color:#fff;font-family:'JetBrains Mono',monospace;font-weight:700">2 / 3 Sessions</span></div>
+<div style="width:100%;background:rgba(255,255,255,.05);height:8px;border-radius:9999px;overflow:hidden;border:1px solid rgba(255,255,255,.05)"><div style="background:linear-gradient(to right,#f97316,#fbbf24);height:100%;width:66.6%;border-radius:9999px"></div></div>
+</div>
+</div>
+
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.37);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:20px;position:relative;overflow:hidden">
+<div style="position:absolute;top:-25%;right:-15%;width:120px;height:120px;border-radius:9999px;background:rgba(20,184,166,.05);filter:blur(40px)"></div>
+<div style="display:flex;align-items:center;justify-content:space-between">
+<h3 style="margin:0;font-size:12px;font-weight:700;color:#fff;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:8px"><i data-lucide="folder-search" style="font-size:16px;color:#2dd4bf"></i>本機資料夾<span style="width:16px;height:16px;border-radius:9999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.1);font-size:10px;color:#9ca3af;display:inline-flex;align-items:center;justify-content:center;margin-left:4px">?</span></h3>
+<span style="font-size:10px;color:#2dd4bf;font-family:'JetBrains Mono',monospace;font-weight:700;background:rgba(20,184,166,.1);padding:2px 8px;border-radius:6px">No Upload</span>
+</div>
+<div style="background:rgba(2,6,23,.5);border-radius:12px;padding:14px;border:1px solid rgba(255,255,255,.05);display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+<span style="color:#6b7280;font-size:10px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em">掃描目標路徑</span>
+<button style="font-size:9px;padding:4px 8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#e5e7eb;font-weight:700;display:flex;align-items:center;gap:4px;cursor:pointer"><i data-lucide="copy" style="font-size:12px"></i>複製</button>
+</div>
+<p style="margin:0;font-size:10px;color:#d1d5db;font-family:'JetBrains Mono',monospace;word-break:break-all;line-height:1.6">D:\Citrus_Pest_and_Disease_Tools\LocalLibrary</p>
+</div>
+<button style="width:100%;padding:10px;color:#fff;font-weight:800;font-size:12px;border-radius:12px;border:none;background:linear-gradient(to right,#14b8a6,#059669);box-shadow:0 10px 15px -3px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer"><i data-lucide="folder-search" style="font-size:14px"></i>重新掃描</button>
+<div style="padding:12px;background:rgba(20,184,166,.1);border:1px solid rgba(20,184,166,.3);color:#5eead4;border-radius:12px;font-size:11px;display:flex;align-items:flex-start;gap:8px"><i data-lucide="check-circle-2" style="font-size:16px;flex-shrink:0"></i><span>掃描完成：找到 4 個權重、2 個資料集。</span></div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<span style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:6px"><i data-lucide="box" style="font-size:12px"></i>權重列表<span style="color:#4b5563;font-family:'JetBrains Mono',monospace">(4)</span></span>
+<button style="font-size:9px;color:#2dd4bf;font-weight:700;background:none;border:none;cursor:pointer">全選</button>
+</div>
+<label style="display:flex;align-items:flex-start;gap:10px;padding:10px;border-radius:8px;border:1px solid rgba(20,184,166,.4);background:rgba(20,184,166,.1)">
+<input type="checkbox" checked style="margin-top:2px;width:14px;height:14px;accent-color:#14b8a6">
+<div style="min-width:0;flex:1">
+<div style="display:flex;align-items:center;gap:6px"><i data-lucide="folder" style="font-size:12px;color:#2dd4bf"></i><span style="font-size:11px;font-weight:700;color:#fff">yolov8n_citrus_e300</span></div>
+<p style="margin:2px 0 0;font-size:9px;color:#6b7280;font-family:'JetBrains Mono',monospace">runs/detect/yolov8n_citrus_e300</p>
+<p style="margin:2px 0 0;font-size:9px;color:#9ca3af">weights/best.pt · args.yaml · 6.2 MB</p>
+</div>
+</label>
+<label style="display:flex;align-items:flex-start;gap:10px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.05);background:rgba(2,6,23,.4)">
+<input type="checkbox" style="margin-top:2px;width:14px;height:14px;accent-color:#14b8a6">
+<div style="min-width:0;flex:1">
+<div style="display:flex;align-items:center;gap:6px"><i data-lucide="file-archive" style="font-size:12px;color:#fbbf24"></i><span style="font-size:11px;font-weight:700;color:#fff">ssdlite_small_run.zip</span><span style="font-size:8px;padding:2px 6px;background:rgba(255,255,255,.1);color:#9ca3af;border-radius:4px;font-weight:700">已載入</span></div>
+<p style="margin:2px 0 0;font-size:9px;color:#6b7280;font-family:'JetBrains Mono',monospace">ssdlite_small_run.zip</p>
+<p style="margin:2px 0 0;font-size:9px;color:#9ca3af">training_metrics.csv · 18.4 MB</p>
+</div>
+</label>
+</div>
+<button style="width:100%;padding:10px;color:#fff;font-weight:800;font-size:12px;border-radius:12px;border:none;background:linear-gradient(to right,#6366f1,#9333ea);display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer"><i data-lucide="download" style="font-size:14px"></i>載入選取項目（1）</button>
+</div>
+
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.37);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:12px">
+<h3 style="margin:0;font-size:12px;font-weight:700;color:#fff;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:8px"><i data-lucide="monitor" style="font-size:16px;color:#818cf8"></i>推論設備配置</h3>
+<span style="font-size:10px;background:rgba(99,102,241,.15);color:#a5b4fc;border:1px solid rgba(99,102,241,.3);padding:2px 8px;border-radius:6px;font-family:'JetBrains Mono',monospace">CUDA:0 RTX 4060</span>
+</div>
+<button style="width:100%;text-align:left;padding:14px;border-radius:12px;border:1px solid rgba(249,115,22,.4);background:linear-gradient(to right,rgba(249,115,22,.1),rgba(245,158,11,.05));box-shadow:0 0 15px rgba(249,115,22,.08);display:flex;flex-direction:column;gap:8px;cursor:pointer">
+<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;font-weight:700;color:#fb923c;display:flex;align-items:center;gap:10px"><i data-lucide="server" style="font-size:16px"></i>CUDA:0 NVIDIA RTX 4060 Laptop</span><i data-lucide="check-circle-2" style="font-size:16px;color:#f97316"></i></div>
+<div style="font-size:10px;color:#6b7280;font-family:'JetBrains Mono',monospace;display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;margin-top:4px;padding-left:24px"><span>VRAM: 1.2G / 8.0G</span><span>Compute Cap: 8.9</span></div>
+</button>
+<button style="width:100%;text-align:left;padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.05);background:rgba(2,6,23,.4);display:flex;flex-direction:column;gap:8px;cursor:pointer">
+<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;font-weight:700;color:#d1d5db;display:flex;align-items:center;gap:10px"><i data-lucide="cpu" style="font-size:16px"></i>CPU (x86_64)</span></div>
+<div style="font-size:10px;color:#6b7280;font-family:'JetBrains Mono',monospace;display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;margin-top:4px;padding-left:24px"><span>RAM: 12.4G / 32.0G</span></div>
+</button>
+<button style="width:100%;text-align:left;padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.05);background:rgba(2,6,23,.4);display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+<span style="font-size:12px;font-weight:700;color:#d1d5db;display:flex;align-items:center;gap:10px"><i data-lucide="monitor" style="font-size:16px"></i>自動調配最佳設備 (Auto)</span>
+</button>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:24px">
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.37);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:20px;position:relative;overflow:hidden">
+<div style="position:absolute;top:0;left:0;width:6px;height:100%;background:linear-gradient(to bottom,#f97316,#fbbf24)"></div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.05);padding-left:8px">
+<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:200px">
+<i data-lucide="edit-2" style="font-size:14px;color:#fb923c"></i>
+<input type="text" value="YOLOv8n · e300 · mosaic on" style="background:rgba(2,6,23,.6);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:8px 14px;font-size:14px;color:#fff;font-weight:700;width:100%;max-width:384px;font-family:inherit">
+</div>
+<div style="display:flex;align-items:center;gap:16px">
+<span style="font-size:10px;padding:4px 12px;background:rgba(255,255,255,.05);color:#9ca3af;border:1px solid rgba(255,255,255,.05);border-radius:9999px;font-family:'JetBrains Mono',monospace;font-weight:600">6.23 MB</span>
+<button style="padding:8px;background:none;border:1px solid transparent;color:#6b7280;border-radius:12px;cursor:pointer"><i data-lucide="trash-2" style="font-size:16px"></i></button>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;font-size:12px;padding-left:8px">
+<div style="background:rgba(2,6,23,.3);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.05)">
+<span style="color:#6b7280;font-size:10px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:block">來源格式檔案</span>
+<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><span style="font-size:9px;padding:2px 6px;border-radius:4px;font-weight:700;border:1px solid rgba(239,68,68,.25);background:rgba(239,68,68,.15);color:#f87171">PyTorch</span><span style="color:#d1d5db;font-weight:700;font-size:11px">best.pt</span></div>
+</div>
+<div style="background:rgba(2,6,23,.3);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.05)">
+<span style="color:#6b7280;font-size:10px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:block">推論架構 (Arch)</span>
+<span style="color:#e5e7eb;font-family:'JetBrains Mono',monospace;font-weight:700;display:block;font-size:11px;margin-top:4px">yolo</span>
+</div>
+<div style="background:rgba(2,6,23,.3);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.05)">
+<span style="color:#6b7280;font-size:10px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:block">優化器與輪數</span>
+<span style="color:#e5e7eb;font-family:'JetBrains Mono',monospace;font-weight:700;display:block;font-size:11px;margin-top:4px">AdamW (Epochs: 300)</span>
+</div>
+<div style="background:rgba(2,6,23,.3);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.05)">
+<span style="color:#6b7280;font-size:10px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:block">最佳 mAP / mAP@50</span>
+<span style="color:#34d399;font-family:'JetBrains Mono',monospace;font-weight:700;display:block;font-size:11px;margin-top:4px">0.5841 / 0.8672</span>
+</div>
+</div>
+<div style="padding-left:8px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+<span style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:#fff;letter-spacing:.05em;text-transform:uppercase"><i data-lucide="package" style="font-size:14px;color:#fb923c"></i>模型格式轉換</span>
+</div>
+<select style="width:100%;background:rgba(6,11,30,.9);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:10px 14px;font-size:12px;color:#fff;font-weight:600;font-family:inherit"><option>ONNX (.onnx)</option><option>TFLite / LiteRT — 不可用</option></select>
+<button style="width:100%;padding:10px;font-weight:800;font-size:12px;border-radius:12px;border:none;background:linear-gradient(to right,#f97316,#f59e0b);color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer"><i data-lucide="cog" style="font-size:14px"></i>轉換為 ONNX (.onnx)</button>
+<p style="margin:0;font-size:9px;color:#4b5563;line-height:1.6">將 best.pt 轉為 ONNX 圖，可在 ONNX Runtime 上跨平台推論。</p>
+</div>
+<div style="font-size:9px;font-family:'JetBrains Mono',monospace;color:#4b5563;display:flex;align-items:center;gap:6px;padding-top:4px;padding-left:8px"><i data-lucide="file-code" style="font-size:14px;color:#6b7280"></i><span style="font-weight:700;color:#6b7280">實體工作區目錄:</span><span style="color:#9ca3af">backend/extracted_runs/6f2a…/yolov8n_citrus_e300</span></div>
+</div>
+
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.37);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:20px;position:relative;overflow:hidden">
+<div style="position:absolute;top:0;left:0;width:6px;height:100%;background:linear-gradient(to bottom,#f97316,#fbbf24)"></div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.05);padding-left:8px">
+<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:200px">
+<i data-lucide="edit-2" style="font-size:14px;color:#fb923c"></i>
+<input type="text" value="SSDLite-Small · e120" style="background:rgba(2,6,23,.6);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:8px 14px;font-size:14px;color:#fff;font-weight:700;width:100%;max-width:384px;font-family:inherit">
+</div>
+<div style="display:flex;align-items:center;gap:16px">
+<span style="font-size:10px;padding:4px 12px;background:rgba(255,255,255,.05);color:#9ca3af;border:1px solid rgba(255,255,255,.05);border-radius:9999px;font-family:'JetBrains Mono',monospace;font-weight:600">14.08 MB</span>
+<button style="padding:8px;background:none;border:1px solid transparent;color:#6b7280;border-radius:12px;cursor:pointer"><i data-lucide="trash-2" style="font-size:16px"></i></button>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;font-size:12px;padding-left:8px">
+<div style="background:rgba(2,6,23,.3);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.05)">
+<span style="color:#6b7280;font-size:10px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:block">來源格式檔案</span>
+<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><span style="font-size:9px;padding:2px 6px;border-radius:4px;font-weight:700;border:1px solid rgba(99,102,241,.25);background:rgba(99,102,241,.15);color:#818cf8">SSDLite</span><span style="color:#d1d5db;font-weight:700;font-size:11px">ssdlite_small.pth</span></div>
+</div>
+<div style="background:rgba(2,6,23,.3);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.05)">
+<span style="color:#6b7280;font-size:10px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:block">推論架構 (Arch)</span>
+<span style="color:#e5e7eb;font-family:'JetBrains Mono',monospace;font-weight:700;display:block;font-size:11px;margin-top:4px">ssdlite_small</span>
+</div>
+<div style="background:rgba(2,6,23,.3);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.05)">
+<span style="color:#6b7280;font-size:10px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:block">優化器與輪數</span>
+<span style="color:#e5e7eb;font-family:'JetBrains Mono',monospace;font-weight:700;display:block;font-size:11px;margin-top:4px">SGD (Epochs: 120)</span>
+</div>
+<div style="background:rgba(2,6,23,.3);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.05)">
+<span style="color:#6b7280;font-size:10px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:block">最佳 mAP / mAP@50</span>
+<span style="color:#34d399;font-family:'JetBrains Mono',monospace;font-weight:700;display:block;font-size:11px;margin-top:4px">0.3120 / 0.6014</span>
+</div>
+</div>
+<div style="padding-left:8px;display:flex;flex-direction:column;gap:8px">
+<span style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:#fff;letter-spacing:.05em;text-transform:uppercase"><i data-lucide="package" style="font-size:14px;color:#fb923c"></i>模型格式轉換</span>
+<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px;display:flex;align-items:flex-start;gap:8px"><i data-lucide="package" style="font-size:14px;color:#4b5563;flex-shrink:0;margin-top:2px"></i><span style="font-size:10px;color:#6b7280;line-height:1.6">僅支援 YOLO 架構的權重匯出，此模型為 SSDLite。</span></div>
+</div>
+<div style="font-size:9px;font-family:'JetBrains Mono',monospace;color:#4b5563;display:flex;align-items:center;gap:6px;padding-top:4px;padding-left:8px"><i data-lucide="file-code" style="font-size:14px;color:#6b7280"></i><span style="font-weight:700;color:#6b7280">實體工作區目錄:</span><span style="color:#9ca3af">LocalLibrary/ssdlite_small_run</span></div>
+</div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isMetrics }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:1280px;margin:0 auto;padding:16px 8px;display:flex;flex-direction:column;gap:24px">
+<div style="display:grid;grid-template-columns:1fr 3fr;gap:32px;align-items:start">
+<div style="position:sticky;top:96px;background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.37);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,.05)">
+<h3 style="margin:0;font-size:12px;font-weight:700;color:#fff;letter-spacing:.05em;text-transform:uppercase;display:flex;align-items:center;gap:8px"><i data-lucide="area-chart" style="font-size:16px;color:#fb923c"></i>對齊與消融指標<span style="width:16px;height:16px;border-radius:9999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.1);font-size:10px;color:#9ca3af;display:inline-flex;align-items:center;justify-content:center">?</span></h3>
+<button style="font-size:9px;padding:4px 8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#e5e7eb;font-weight:700;cursor:pointer">取消全部</button>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;max-height:360px;overflow-y:auto;padding-right:4px">
+<sc-for list="{{ metricOpts }}" as="m" hint-placeholder-count="6">
+<label style="display:flex;align-items:flex-start;gap:12px;padding:10px;border-radius:12px;border:1px solid rgba(249,115,22,.3);background:rgba(249,115,22,.1);color:#fff">
+<input type="checkbox" checked style="margin-top:4px;accent-color:#f97316;width:14px;height:14px">
+<div><p style="margin:0;font-size:11px;font-weight:700;line-height:1.2">{{ m.name }}</p><p style="margin:4px 0 0;font-size:9px;color:#6b7280;line-height:1.4">{{ m.desc }}</p></div>
+</label>
+</sc-for>
+</div>
+<div style="padding-top:16px;border-top:1px solid rgba(255,255,255,.05)">
+<label style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;border:1px solid rgba(99,102,241,.3);background:rgba(99,102,241,.1);color:#fff">
+<input type="checkbox" checked style="accent-color:#6366f1;width:14px;height:14px">
+<div><p style="margin:0;font-size:11px;font-weight:700;line-height:1.2">正規化混淆矩陣對比</p><p style="margin:4px 0 0;font-size:9px;color:#6b7280">展示類別分類精準交叉映射</p></div>
+</label>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:32px">
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.37);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:24px;position:relative;overflow:hidden">
+<div style="position:absolute;top:-20%;right:-10%;width:150px;height:150px;border-radius:9999px;background:rgba(99,102,241,.05);filter:blur(50px)"></div>
+<div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:16px">
+<div style="display:flex;align-items:center;gap:10px">
+<div style="padding:8px;background:rgba(99,102,241,.1);border-radius:8px;color:#818cf8;display:flex"><i data-lucide="layers" style="font-size:16px"></i></div>
+<div><h3 style="margin:0;font-weight:800;color:#fff;font-size:14px;letter-spacing:-.01em">學術混淆矩陣消融分析 (Confusion Matrix)</h3><p style="margin:2px 0 0;font-size:10px;color:#9ca3af;font-family:'JetBrains Mono',monospace">Differentiates Citrus Body Pest from Physical Leaf Damages</p></div>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+<div style="background:rgba(12,21,46,.35);border:1px solid rgba(255,255,255,.04);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;font-weight:700;color:#fff">YOLOv8n · e300 · mosaic on</span><span style="font-size:9px;color:#818cf8;font-family:'JetBrains Mono',monospace">confusion_matrix.png</span></div>
+<div style="height:256px;border-radius:8px;border:1px dashed rgba(255,255,255,.08);background:rgba(2,6,23,.6);display:flex;align-items:center;justify-content:center;color:#4b5563;font-size:10px;font-family:'JetBrains Mono',monospace">後端產生的混淆矩陣圖（佔位）</div>
+</div>
+<div style="background:rgba(12,21,46,.35);border:1px solid rgba(255,255,255,.04);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;font-weight:700;color:#fff">SSDLite-Small · e120</span><span style="font-size:9px;color:#6b7280;font-family:'JetBrains Mono',monospace">無此圖</span></div>
+<div style="height:208px;border-radius:8px;border:1px solid rgba(255,255,255,.05);background:rgba(2,6,23,.4);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#4b5563;font-size:10px;text-align:center;padding:16px"><i data-lucide="image-off" style="font-size:24px"></i><span>Single weight file format skips training phase validation matrices.</span></div>
+</div>
+</div>
+</div>
+
+<sc-for list="{{ chartSections }}" as="c" hint-placeholder-count="3">
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.37);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:24px;position:relative;overflow:hidden">
+<div style="position:absolute;top:-20%;right:-10%;width:150px;height:150px;border-radius:9999px;background:rgba(249,115,22,.05);filter:blur(50px)"></div>
+<div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:16px">
+<div style="display:flex;align-items:center;gap:10px">
+<div style="padding:8px;background:rgba(249,115,22,.1);border-radius:8px;color:#fb923c;display:flex"><i data-lucide="trending-up" style="font-size:16px"></i></div>
+<div><h4 style="margin:0;font-weight:800;color:#fff;font-size:14px;letter-spacing:-.01em">{{ c.name }}</h4><p style="margin:2px 0 0;font-size:10px;color:#9ca3af">{{ c.desc }}</p></div>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+<div style="background:rgba(12,21,46,.35);border:1px solid rgba(255,255,255,.04);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<span style="font-size:11px;font-weight:700;color:#fff">YOLOv8n · e300 · mosaic on</span>
+<div style="height:128px;border-radius:8px;border:1px dashed rgba(255,255,255,.08);background:rgba(2,6,23,.6);display:flex;align-items:center;justify-content:center;color:#4b5563;font-size:10px;font-family:'JetBrains Mono',monospace">裁切後的曲線圖（佔位）</div>
+</div>
+<div style="background:rgba(12,21,46,.35);border:1px solid rgba(255,255,255,.04);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<span style="font-size:11px;font-weight:700;color:#fff">SSDLite-Small · e120</span>
+<div style="height:128px;border-radius:8px;border:1px dashed rgba(255,255,255,.08);background:rgba(2,6,23,.6);display:flex;align-items:center;justify-content:center;color:#4b5563;font-size:10px;font-family:'JetBrains Mono',monospace">依 training_metrics.csv 繪製（佔位）</div>
+</div>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;justify-content:center;padding:32px 0 16px"><button style="padding:14px 24px;background:rgba(2,6,23,.6);border:1px solid rgba(255,255,255,.05);color:#9ca3af;font-size:12px;font-weight:700;border-radius:16px;display:flex;align-items:center;gap:8px;cursor:pointer"><i data-lucide="arrow-up" style="font-size:16px"></i>回到最上方</button></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDemo }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:1280px;margin:0 auto;padding:16px 8px">
+<div style="display:grid;grid-template-columns:3fr 1fr;gap:32px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:12px">
+<div style="display:flex;align-items:center;gap:10px">
+<div style="padding:8px;background:rgba(249,115,22,.1);border-radius:8px;color:#fb923c;display:flex"><i data-lucide="compass" style="font-size:16px"></i></div>
+<div><h3 style="margin:0;font-size:14px;font-weight:800;color:#fff;letter-spacing:-.01em;text-transform:uppercase">病蟲害即時巡檢報告</h3><p style="margin:2px 0 0;font-size:10px;color:#9ca3af;font-family:'JetBrains Mono',monospace">Real-Time Phytosanitary Inspection Reports (4 Samples)</p></div>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+<sc-for list="{{ demoCards }}" as="d" hint-placeholder-count="4">
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.37);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:12px;font-family:'JetBrains Mono',monospace">
+<span style="color:#d1d5db;font-weight:600;font-size:11px">{{ d.filename }}</span>
+<div style="display:flex;align-items:center;gap:8px">
+<button style="padding:4px 10px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#9ca3af;cursor:pointer">對照原始圖</button>
+<button style="padding:4px 10px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid rgba(255,255,255,.1);background:none;color:#d1d5db;display:flex;align-items:center;gap:4px;cursor:pointer"><i data-lucide="maximize-2" style="font-size:12px"></i>放大</button>
+<span style="color:#34d399;display:flex;align-items:center;gap:4px;font-weight:700;font-size:10px"><i data-lucide="check-circle" style="font-size:14px"></i>標註成功</span>
+</div>
+</div>
+<div style="position:relative;height:240px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,.05);background:#020617;display:flex;align-items:center;justify-content:center;color:#4b5563;font-size:10px;font-family:'JetBrains Mono',monospace">
+標註後影像（佔位）
+<div style="position:absolute;top:8px;left:8px;padding:2px 10px;background:rgba(249,115,22,.8);border:1px solid rgba(251,146,60,.2);font-size:9px;color:#fff;border-radius:6px;font-family:'JetBrains Mono',monospace;font-weight:700">YOLOv8n 診斷</div>
+</div>
+<div style="background:rgba(2,6,23,.4);border-radius:12px;padding:12px;border:1px solid rgba(255,255,255,.05);display:flex;flex-direction:column;gap:8px;font-size:10px;font-family:'JetBrains Mono',monospace">
+<div style="color:#9ca3af;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:6px"><span>檢出: <span style="color:#fb923c;font-weight:800">{{ d.counts }} 個病徵特徵</span></span><span style="font-size:8px;text-transform:uppercase;letter-spacing:.08em;font-weight:800;background:rgba(249,115,22,.1);color:#fb923c;padding:2px 8px;border-radius:4px;border:1px solid rgba(249,115,22,.2)">ENGINE: GPU</span></div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;padding-top:2px">
+<span style="padding:4px 8px;border-radius:6px;border:1px solid rgba(239,68,68,.2);background:rgba(239,68,68,.1);color:#f87171;font-size:9px;font-weight:700;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:9999px;background:#ef4444"></span>{{ d.tagA }}</span>
+<span style="padding:4px 8px;border-radius:6px;border:1px solid rgba(245,158,11,.2);background:rgba(245,158,11,.1);color:#fbbf24;font-size:9px;font-weight:700;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:9999px;background:#fbbf24"></span>{{ d.tagB }}</span>
+</div>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="position:sticky;top:96px;background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.37);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:24px;position:relative;overflow:hidden">
+<div style="position:absolute;top:-25%;right:-15%;width:120px;height:120px;border-radius:9999px;background:rgba(249,115,22,.05);filter:blur(40px)"></div>
+<div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,.05)">
+<div style="display:flex;align-items:center;gap:8px"><i data-lucide="sliders" style="font-size:16px;color:#fb923c"></i><h3 style="margin:0;font-weight:800;color:#fff;font-size:12px;letter-spacing:.05em;text-transform:uppercase">控制台設定</h3></div>
+<div style="font-size:9px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;font-weight:700;background:rgba(34,197,94,.1);color:#4ade80;border:1px solid rgba(34,197,94,.2);padding:2px 10px;border-radius:9999px">CUDA:0</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<label style="font-size:11px;color:#9ca3af;font-weight:700;letter-spacing:.05em;text-transform:uppercase">1. 批次上傳影像</label>
+<div style="padding:24px;border-radius:12px;border:2px dashed rgba(255,255,255,.1);text-align:center">
+<i data-lucide="upload-cloud" style="font-size:36px;color:#9ca3af"></i>
+<p style="margin:8px 0 0;font-size:11px;color:#e5e7eb;font-weight:700">拖曳圖片/資料夾或點擊</p>
+<p style="margin:4px 0 0;font-size:9px;color:#6b7280">支援多檔案、整包目錄掃描推論</p>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<label style="font-size:11px;color:#9ca3af;font-weight:700;letter-spacing:.05em;text-transform:uppercase">2. 選擇推理模型</label>
+<select style="width:100%;background:rgba(6,11,30,.9);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:10px 14px;font-size:12px;color:#fff;font-weight:600;font-family:inherit"><option>YOLOv8n · e300 · mosaic on</option><option>SSDLite-Small · e120</option></select>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<label style="font-size:11px;color:#9ca3af;font-weight:700;letter-spacing:.05em;text-transform:uppercase">3. 隨機抽樣模式</label>
+<select style="width:100%;background:rgba(6,11,30,.9);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:10px 14px;font-size:12px;color:#fff;font-weight:600;font-family:inherit"><option>隨機 4 張並列</option><option>隨機 1 張檢驗</option><option>隨機 9 張矩陣</option><option>載入全部圖片</option></select>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;justify-content:space-between;font-size:11px">
+<label style="color:#9ca3af;font-weight:700;letter-spacing:.05em;text-transform:uppercase;display:flex;align-items:center;gap:6px">4. 信心閾值 (Confidence)<span style="width:16px;height:16px;border-radius:9999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.1);font-size:10px;color:#9ca3af;display:inline-flex;align-items:center;justify-content:center">?</span></label>
+<span style="color:#fb923c;font-family:'JetBrains Mono',monospace;font-weight:800;background:rgba(249,115,22,.1);padding:2px 8px;border-radius:4px">0.35</span>
+</div>
+<input type="range" min="0.1" max="0.9" step="0.05" value="0.35" style="width:100%;accent-color:#f97316;height:4px">
+</div>
+<div style="padding-top:16px;border-top:1px solid rgba(255,255,255,.05);display:flex;flex-direction:column;gap:8px">
+<button style="width:100%;padding:10px;background:linear-gradient(to right,#f97316,#f59e0b);color:#fff;font-weight:800;font-size:12px;border:none;border-radius:12px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer"><i data-lucide="refresh-cw" style="font-size:14px"></i>重新抽樣 (32 張)</button>
+<button style="width:100%;padding:10px;background:rgba(255,255,255,.05);color:#9ca3af;font-weight:800;border:1px solid rgba(255,255,255,.1);font-size:12px;border-radius:12px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer"><i data-lucide="trash-2" style="font-size:14px"></i>清除巡診歷史</button>
+</div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDataset }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:1280px;margin:0 auto;padding:16px 8px">
+<div style="display:grid;grid-template-columns:1fr 3fr;gap:32px;align-items:start">
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.37);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<h3 style="margin:0;font-size:12px;font-weight:700;color:#fff;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:8px"><i data-lucide="folder-tree" style="font-size:16px;color:#fb7185"></i>資料集分析</h3>
+<span style="font-size:10px;color:#fb7185;font-family:'JetBrains Mono',monospace;font-weight:700;background:rgba(244,63,94,.1);padding:2px 8px;border-radius:6px">No Unzip</span>
+</div>
+<div style="padding:24px;border-radius:12px;border:2px dashed rgba(255,255,255,.1);text-align:center">
+<i data-lucide="file-archive" style="font-size:32px;color:#fb7185"></i>
+<p style="margin:8px 0 0;font-size:11px;color:#fff;font-weight:700">拖入資料集 ZIP</p>
+<p style="margin:4px 0 0;font-size:9px;color:#6b7280;line-height:1.6">支援 YOLO / COCO / Pascal VOC，全程不解壓縮</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em">分析紀錄 (2)</span>
+<div style="padding:10px;border-radius:8px;border:1px solid rgba(244,63,94,.4);background:rgba(244,63,94,.1)">
+<p style="margin:0;font-size:11px;font-weight:700;color:#fff">citrus_v4_yolo.zip</p>
+<p style="margin:2px 0 0;font-size:9px;color:#6b7280;font-family:'JetBrains Mono',monospace">YOLO · 4,463 張 · 08-30 21:14</p>
+</div>
+<div style="padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.05);background:rgba(2,6,23,.4)">
+<p style="margin:0;font-size:11px;font-weight:700;color:#e5e7eb">citrus_v3_coco.zip</p>
+<p style="margin:2px 0 0;font-size:9px;color:#6b7280;font-family:'JetBrains Mono',monospace">COCO · 2,110 張 · 08-28 10:02</p>
+</div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:24px">
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.37);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:16px;position:relative;overflow:hidden">
+<div style="position:absolute;top:-25%;right:-8%;width:180px;height:180px;border-radius:9999px;background:rgba(244,63,94,.05);filter:blur(60px)"></div>
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+<div style="display:flex;align-items:center;gap:12px">
+<div style="padding:10px;background:rgba(244,63,94,.1);border-radius:12px;color:#fb7185;display:flex"><i data-lucide="folder-tree" style="font-size:20px"></i></div>
+<div><h2 style="margin:0;font-size:14px;font-weight:800;color:#fff;letter-spacing:-.01em">citrus_v4_yolo.zip</h2><p style="margin:2px 0 0;font-size:10px;color:#9ca3af;font-family:'JetBrains Mono',monospace">根目錄 citrus_v4/</p></div>
+</div>
+<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+<span style="font-size:10px;padding:4px 10px;border-radius:6px;border:1px solid rgba(244,63,94,.3);background:rgba(244,63,94,.1);color:#fb7185;font-family:'JetBrains Mono',monospace;font-weight:700">YOLO</span>
+<span style="font-size:10px;padding:4px 10px;border-radius:6px;border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.1);color:#34d399;font-family:'JetBrains Mono',monospace;font-weight:700;display:flex;align-items:center;gap:4px"><i data-lucide="check-circle-2" style="font-size:12px"></i>深度分析</span>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+<div style="background:rgba(2,6,23,.3);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.05)"><span style="color:#6b7280;font-size:9px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:block">壓縮檔大小</span><span style="color:#fff;font-size:12px;font-family:'JetBrains Mono',monospace;font-weight:700;margin-top:2px;display:block">612.4 MB</span></div>
+<div style="background:rgba(2,6,23,.3);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.05)"><span style="color:#6b7280;font-size:9px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:block">解壓後大小</span><span style="color:#fff;font-size:12px;font-family:'JetBrains Mono',monospace;font-weight:700;margin-top:2px;display:block">638.1 MB</span></div>
+<div style="background:rgba(2,6,23,.3);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.05)"><span style="color:#6b7280;font-size:9px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:block">壓縮檔成員數</span><span style="color:#fff;font-size:12px;font-family:'JetBrains Mono',monospace;font-weight:700;margin-top:2px;display:block">8,931</span></div>
+<div style="background:rgba(2,6,23,.3);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.05)"><span style="color:#6b7280;font-size:9px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:block">分析耗時</span><span style="color:#fff;font-size:12px;font-family:'JetBrains Mono',monospace;font-weight:700;margin-top:2px;display:block">0.84 秒</span></div>
+</div>
+<div style="padding:12px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);color:#6ee7b7;border-radius:12px;font-size:11px;display:flex;align-items:flex-start;gap:8px"><i data-lucide="hash" style="font-size:16px;flex-shrink:0;margin-top:2px"></i><span>檔名類別提示交叉檢查：<span style="font-family:'JetBrains Mono',monospace;font-weight:700"> 4,401 / 4,463 </span>相符（檔名標示的類別皆確實出現在標註內容中）</span></div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+<sc-for list="{{ dsCards }}" as="k" hint-placeholder-count="4">
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.37);border-radius:16px;padding:20px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+<div style="min-width:0"><p style="margin:0;font-size:10px;color:#6b7280;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em">{{ k.en }}</p><p style="margin:4px 0 0;font-size:24px;font-weight:800;color:#fff;letter-spacing:-.02em">{{ k.value }}</p></div>
+<div style="padding:8px;border-radius:8px;background:rgba(244,63,94,.1);color:#fb7185;display:flex"><i data-lucide="image" style="font-size:16px"></i></div>
+</div>
+<p style="margin:8px 0 0;font-size:11px;color:#d1d5db;font-weight:600">{{ k.label }}</p>
+<p style="margin:2px 0 0;font-size:9px;color:#6b7280;line-height:1.6">{{ k.sub }}</p>
+</div>
+</sc-for>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:16px">
+<h4 style="margin:0;font-size:12px;font-weight:700;color:#fff;letter-spacing:.05em;text-transform:uppercase">Split 組成</h4>
+<div style="height:200px;border-radius:8px;border:1px dashed rgba(255,255,255,.08);background:rgba(2,6,23,.5);display:flex;align-items:center;justify-content:center;color:#4b5563;font-size:10px;font-family:'JetBrains Mono',monospace">Recharts 堆疊長條圖（佔位）</div>
+</div>
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:16px">
+<h4 style="margin:0;font-size:12px;font-weight:700;color:#fff;letter-spacing:.05em;text-transform:uppercase">標註密度</h4>
+<div style="height:200px;border-radius:8px;border:1px dashed rgba(255,255,255,.08);background:rgba(2,6,23,.5);display:flex;align-items:center;justify-content:center;color:#4b5563;font-size:10px;font-family:'JetBrains Mono',monospace">Recharts 折線圖（佔位）</div>
+</div>
+</div>
+
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;justify-content:space-between"><h4 style="margin:0;font-size:12px;font-weight:700;color:#fff;letter-spacing:.05em;text-transform:uppercase">類別分佈</h4><button style="font-size:9px;padding:4px 8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#e5e7eb;font-weight:700;cursor:pointer">依 split 拆分</button></div>
+<div style="height:260px;border-radius:8px;border:1px dashed rgba(255,255,255,.08);background:rgba(2,6,23,.5);display:flex;align-items:center;justify-content:center;color:#4b5563;font-size:10px;font-family:'JetBrains Mono',monospace">Recharts 橫向長條圖（佔位）</div>
+</div>
+
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:0;overflow:hidden">
+<table style="width:100%;border-collapse:collapse;font-size:12px">
+<thead><tr style="border-bottom:1px solid rgba(255,255,255,.06);color:#9ca3af">
+<th style="padding:12px 16px;text-align:left;font-weight:500">類別</th><th style="padding:12px 16px;text-align:right;font-weight:500">標註數</th><th style="padding:12px 16px;text-align:right;font-weight:500">影像數</th><th style="padding:12px 16px;text-align:right;font-weight:500">佔比</th><th style="padding:12px 16px;text-align:right;font-weight:500">中位框面積</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{ classRows }}" as="r" hint-placeholder-count="5">
+<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
+<td style="padding:12px 16px;color:#f3f4f6">{{ r.name }}</td>
+<td style="padding:12px 16px;text-align:right;font-family:'JetBrains Mono',monospace;color:#e5e7eb">{{ r.ann }}</td>
+<td style="padding:12px 16px;text-align:right;font-family:'JetBrains Mono',monospace;color:#e5e7eb">{{ r.img }}</td>
+<td style="padding:12px 16px;text-align:right;font-family:'JetBrains Mono',monospace;color:#9ca3af">{{ r.pct }}</td>
+<td style="padding:12px 16px;text-align:right;font-family:'JetBrains Mono',monospace;color:#9ca3af">{{ r.area }}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isEvaluate }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:1280px;margin:0 auto;padding:16px 8px">
+<div style="display:grid;grid-template-columns:1fr 2fr;gap:24px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:24px">
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.37);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<h3 style="margin:0;font-size:12px;font-weight:700;color:#fff;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:8px"><i data-lucide="play" style="font-size:16px;color:#22d3ee"></i>送出評估</h3>
+<button style="font-size:9px;padding:4px 8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#e5e7eb;font-weight:700;display:flex;align-items:center;gap:4px;cursor:pointer"><i data-lucide="refresh-cw" style="font-size:12px"></i>重新整理</button>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<label style="font-size:10px;color:#6b7280;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:flex;align-items:center;gap:6px"><i data-lucide="box" style="font-size:12px"></i>模型</label>
+<select style="width:100%;background:rgba(2,6,23,.6);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 12px;font-size:12px;color:#fff;font-family:inherit"><option>YOLOv8n · e300 · mosaic on · 300 epochs</option><option>SSDLite-Small · e120 —（不支援）</option></select>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<label style="font-size:10px;color:#6b7280;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:flex;align-items:center;gap:6px"><i data-lucide="database" style="font-size:12px"></i>資料集</label>
+<select style="width:100%;background:rgba(2,6,23,.6);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 12px;font-size:12px;color:#fff;font-family:inherit"><option>citrus_v4（LocalLibrary）</option><option>citrus_v4_yolo.zip —（無法評估）</option></select>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<label style="font-size:10px;color:#6b7280;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em">評估 Split</label>
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<button style="padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;border:1px solid rgba(6,182,212,.5);background:rgba(6,182,212,.2);color:#67e8f9;cursor:pointer">test</button>
+<button style="padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#9ca3af;cursor:pointer">valid</button>
+<button style="padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#9ca3af;cursor:pointer">train</button>
+</div>
+</div>
+<button style="width:100%;padding:10px;color:#fff;font-weight:800;font-size:12px;border:none;border-radius:12px;background:linear-gradient(to right,#06b6d4,#2563eb);display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer"><i data-lucide="play" style="font-size:14px"></i>開始評估</button>
+<p style="margin:0;font-size:9px;color:#6b7280;line-height:1.7">評估會讓模型實際跑過所選 split 並重新計算指標，與訓練時記錄的舊數值無關。CPU 上實測單張約 0.4 秒，445 張影像約需 4 分鐘；期間可自由切換分頁，進度不會遺失。</p>
+</div>
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:16px">
+<h3 style="margin:0;font-size:12px;font-weight:700;color:#fff;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:8px"><i data-lucide="file-text" style="font-size:16px;color:#22d3ee"></i>成果報告</h3>
+<p style="margin:0;font-size:11px;color:#67e8f9;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.25);border-radius:8px;padding:10px;line-height:1.6">這些評估使用同一份測試集，可直接比較。</p>
+<button style="width:100%;padding:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:#e5e7eb;font-weight:800;font-size:12px;border-radius:12px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer"><i data-lucide="file-down" style="font-size:14px"></i>產生 HTML 報告（已選 2）</button>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:24px">
+<div>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+<h3 style="margin:0;font-size:12px;font-weight:700;color:#fff;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:8px"><i data-lucide="gauge-circle" style="font-size:16px;color:#22d3ee"></i>評估紀錄<span style="color:#4b5563;font-family:'JetBrains Mono',monospace">(3)</span></h3>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(6,182,212,.4);border-radius:12px;padding:16px;background-color:rgba(6,182,212,.04)">
+<div style="display:flex;align-items:flex-start;gap:12px">
+<input type="checkbox" checked style="margin-top:4px;width:14px;height:14px;accent-color:#06b6d4">
+<div style="min-width:0;flex:1">
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:12px;font-weight:700;color:#fff">YOLOv8n · e300 · mosaic on</span><span style="font-size:9px;padding:2px 6px;border-radius:4px;border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.1);color:#34d399;font-weight:700;display:flex;align-items:center;gap:4px"><i data-lucide="check-circle-2" style="font-size:14px"></i>完成</span></div>
+<p style="margin:4px 0 0;font-size:10px;color:#6b7280;font-family:'JetBrains Mono',monospace">citrus_v4 / test · 445 張 · 3 分 52 秒</p>
+<div style="display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:8px;font-size:11px">
+<span style="color:#9ca3af">mAP@50 <b style="color:#6ee7b7;font-family:'JetBrains Mono',monospace">0.867</b></span>
+<span style="color:#9ca3af">mAP@50-95 <b style="color:#fff;font-family:'JetBrains Mono',monospace">0.584</b></span>
+<span style="color:#9ca3af">P <b style="color:#fff;font-family:'JetBrains Mono',monospace">0.881</b></span>
+<span style="color:#9ca3af">R <b style="color:#fff;font-family:'JetBrains Mono',monospace">0.812</b></span>
+</div>
+</div>
+<button style="background:none;border:none;color:#4b5563;cursor:pointer"><i data-lucide="trash-2" style="font-size:14px"></i></button>
+</div>
+</div>
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:16px">
+<div style="display:flex;align-items:flex-start;gap:12px">
+<div style="min-width:0;flex:1">
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:12px;font-weight:700;color:#fff">YOLOv8s · e300 · no mosaic</span><span style="font-size:9px;padding:2px 6px;border-radius:4px;border:1px solid rgba(6,182,212,.3);background:rgba(6,182,212,.1);color:#67e8f9;font-weight:700;display:flex;align-items:center;gap:4px"><i data-lucide="loader-2" style="font-size:14px"></i>推論中 268/445</span></div>
+<p style="margin:4px 0 0;font-size:10px;color:#6b7280;font-family:'JetBrains Mono',monospace">citrus_v4 / test · 445 張 · 2 分 11 秒</p>
+<div style="margin-top:8px;height:4px;border-radius:9999px;background:rgba(255,255,255,.05);overflow:hidden"><div style="height:100%;width:33%;border-radius:9999px;background:#06b6d4"></div></div>
+<p style="margin:6px 0 0;font-size:9px;color:#4b5563;font-family:'JetBrains Mono',monospace">val: Scanning /citrus_v4/test/labels…</p>
+</div>
+<button style="background:none;border:none;color:#4b5563;cursor:pointer"><i data-lucide="trash-2" style="font-size:14px"></i></button>
+</div>
+</div>
+</div>
+</div>
+
+<div style="background:rgba(8,14,32,.45);backdrop-filter:blur(28px);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:16px">
+<h3 style="margin:0;font-size:14px;font-weight:800;color:#fff">YOLOv8n · e300 · mosaic on ／ citrus_v4 test</h3>
+<span style="font-size:10px;color:#6b7280;font-family:'JetBrains Mono',monospace">conf 0.25 · IoU 0.45</span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+<div style="background:rgba(2,6,23,.3);border:1px solid rgba(255,255,255,.05);border-radius:12px;padding:14px"><div style="font-size:9px;color:#6b7280;text-transform:uppercase;font-family:'JetBrains Mono',monospace">mAP@50</div><div style="font-size:20px;font-weight:800;color:#6ee7b7;font-family:'JetBrains Mono',monospace;margin-top:4px">0.867</div></div>
+<div style="background:rgba(2,6,23,.3);border:1px solid rgba(255,255,255,.05);border-radius:12px;padding:14px"><div style="font-size:9px;color:#6b7280;text-transform:uppercase;font-family:'JetBrains Mono',monospace">mAP@50-95</div><div style="font-size:20px;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace;margin-top:4px">0.584</div></div>
+<div style="background:rgba(2,6,23,.3);border:1px solid rgba(255,255,255,.05);border-radius:12px;padding:14px"><div style="font-size:9px;color:#6b7280;text-transform:uppercase;font-family:'JetBrains Mono',monospace">Micro-Acc</div><div style="font-size:20px;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace;margin-top:4px">0.741</div></div>
+<div style="background:rgba(2,6,23,.3);border:1px solid rgba(255,255,255,.05);border-radius:12px;padding:14px"><div style="font-size:9px;color:#6b7280;text-transform:uppercase;font-family:'JetBrains Mono',monospace">F1</div><div style="font-size:20px;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace;margin-top:4px">0.845</div></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+<div style="height:200px;border-radius:8px;border:1px dashed rgba(255,255,255,.08);background:rgba(2,6,23,.5);display:flex;align-items:center;justify-content:center;color:#4b5563;font-size:10px;font-family:'JetBrains Mono',monospace">PR 曲線（佔位）</div>
+<div style="height:200px;border-radius:8px;border:1px dashed rgba(255,255,255,.08);background:rgba(2,6,23,.5);display:flex;align-items:center;justify-content:center;color:#4b5563;font-size:10px;font-family:'JetBrains Mono',monospace">AP × 標註框尺寸散點圖（佔位）</div>
+</div>
+<table style="width:100%;border-collapse:collapse;font-size:12px">
+<thead><tr style="border-bottom:1px solid rgba(255,255,255,.06);color:#9ca3af"><th style="padding:10px 12px;text-align:left;font-weight:500">類別</th><th style="padding:10px 12px;text-align:right;font-weight:500">AP@50</th><th style="padding:10px 12px;text-align:right;font-weight:500">AP@50-95</th><th style="padding:10px 12px;text-align:right;font-weight:500">Recall</th><th style="padding:10px 12px;text-align:right;font-weight:500">中位框面積</th></tr></thead>
+<tbody>
+<sc-for list="{{ evalRows }}" as="e" hint-placeholder-count="5">
+<tr style="border-bottom:1px solid rgba(255,255,255,.04)"><td style="padding:10px 12px;color:#f3f4f6">{{ e.name }}</td><td style="padding:10px 12px;text-align:right;font-family:'JetBrains Mono',monospace;color:#6ee7b7">{{ e.ap50 }}</td><td style="padding:10px 12px;text-align:right;font-family:'JetBrains Mono',monospace;color:#e5e7eb">{{ e.ap }}</td><td style="padding:10px 12px;text-align:right;font-family:'JetBrains Mono',monospace;color:#e5e7eb">{{ e.recall }}</td><td style="padding:10px 12px;text-align:right;font-family:'JetBrains Mono',monospace;color:#9ca3af">{{ e.area }}</td></tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isRegistry }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:1280px;margin:0 auto;padding:16px 8px;display:flex;flex-direction:column;gap:24px;text-align:left">
+<header style="display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:16px">
+<div>
+<h2 style="margin:0;display:flex;align-items:center;gap:8px;font-size:24px;font-weight:600;color:#f1f5f9"><i data-lucide="database" style="font-size:24px;color:#34d399"></i>權重登錄簿</h2>
+<p style="margin:4px 0 0;max-width:768px;font-size:14px;color:#94a3b8;line-height:1.6">以權重檔內容的 SHA-256 為身分的長期帳本，記錄每顆權重的訓練超參數與歷次實測指標。與已載入的 Session 生命週期脫鉤——刪除模型或重啟系統都不會影響這裡的紀錄。</p>
+</div>
+<button style="display:inline-flex;align-items:center;gap:8px;border-radius:8px;border:1px solid #475569;padding:6px 12px;font-size:14px;color:#e2e8f0;background:none;cursor:pointer"><i data-lucide="refresh-cw" style="font-size:16px"></i>重新整理</button>
+</header>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+<div style="border-radius:12px;border:1px solid rgba(51,65,85,.6);background:rgba(15,23,42,.4);padding:12px 16px"><div style="font-size:12px;color:#64748b">已記錄權重</div><div style="margin-top:4px;font-size:24px;font-weight:600;color:#f1f5f9">14</div></div>
+<div style="border-radius:12px;border:1px solid rgba(51,65,85,.6);background:rgba(15,23,42,.4);padding:12px 16px"><div style="font-size:12px;color:#64748b">訓練紀錄</div><div style="margin-top:4px;font-size:24px;font-weight:600;color:#f1f5f9">14</div></div>
+<div style="border-radius:12px;border:1px solid rgba(51,65,85,.6);background:rgba(15,23,42,.4);padding:12px 16px"><div style="font-size:12px;color:#64748b">實測次數</div><div style="margin-top:4px;font-size:24px;font-weight:600;color:#f1f5f9">37</div></div>
+<div style="border-radius:12px;border:1px solid rgba(51,65,85,.6);background:rgba(15,23,42,.4);padding:12px 16px"><div style="font-size:12px;color:#64748b">資料庫引擎</div><div style="margin-top:4px;font-size:24px;font-weight:600;color:#f1f5f9">postgresql</div><div style="margin-top:2px;font-size:12px;color:#64748b">3 個資料集被評估過</div></div>
+</div>
+<section style="border-radius:12px;border:1px solid rgba(51,65,85,.6);background:rgba(15,23,42,.4);padding:16px">
+<h3 style="margin:0 0 12px;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:#cbd5e1"><i data-lucide="trophy" style="font-size:16px;color:#fbbf24"></i>各指標的最佳紀錄</h3>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+<sc-for list="{{ bestRows }}" as="b" hint-placeholder-count="3">
+<div style="border-radius:8px;border:1px solid rgba(51,65,85,.5);background:rgba(15,23,42,.5);padding:8px 12px">
+<div style="font-size:12px;color:#64748b">{{ b.metric }}</div>
+<div style="margin-top:2px;font-family:'JetBrains Mono',monospace;font-size:18px;color:#6ee7b7">{{ b.value }}</div>
+<div style="margin-top:2px;font-size:12px;color:#94a3b8">{{ b.who }}</div>
+</div>
+</sc-for>
+</div>
+</section>
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px">
+<div style="display:inline-flex;border-radius:8px;border:1px solid #334155;padding:2px">
+<button style="border-radius:6px;padding:6px 12px;font-size:14px;background:rgba(16,185,129,.2);color:#6ee7b7;border:none;cursor:pointer">權重清單（14）</button>
+<button style="border-radius:6px;padding:6px 12px;font-size:14px;background:none;color:#94a3b8;border:none;cursor:pointer">指標帳本（37）</button>
+</div>
+<div style="position:relative;flex:1;max-width:320px">
+<i data-lucide="search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:16px;color:#64748b"></i>
+<input type="text" placeholder="搜尋權重名稱或檔名" style="width:100%;border-radius:8px;border:1px solid #334155;background:rgba(15,23,42,.6);padding:6px 12px 6px 36px;font-size:14px;color:#e2e8f0;font-family:inherit">
+</div>
+</div>
+<div style="overflow-x:auto;border-radius:12px;border:1px solid rgba(51,65,85,.6);background:rgba(15,23,42,.4)">
+<table style="width:100%;border-collapse:collapse;font-size:14px">
+<thead><tr style="border-bottom:1px solid rgba(51,65,85,.6);color:#94a3b8">
+<th style="padding:12px 16px;text-align:left;font-weight:500">權重</th><th style="padding:12px 16px;text-align:right;font-weight:500">Epochs</th><th style="padding:12px 16px;text-align:right;font-weight:500">大小</th><th style="padding:12px 16px;text-align:right;font-weight:500">最佳 mAP@50 ↓</th><th style="padding:12px 16px;text-align:right;font-weight:500">最佳 Micro-Acc</th><th style="padding:12px 16px;text-align:right;font-weight:500">評估次數</th><th style="padding:12px 16px;text-align:right;font-weight:500">最後出現</th><th style="padding:12px 16px;text-align:right;font-weight:500">操作</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{ weightRows }}" as="w" hint-placeholder-count="5">
+<tr style="border-bottom:1px solid rgba(30,41,59,.6)">
+<td style="padding:12px 16px">
+<div style="font-weight:500;color:#f1f5f9">{{ w.name }}</div>
+<div style="margin-top:4px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+<span style="border-radius:4px;border:1px solid rgba(99,102,241,.3);background:rgba(99,102,241,.1);color:#a5b4fc;padding:2px 6px;font-size:12px">{{ w.arch }}</span>
+<span style="border-radius:4px;border:1px solid rgba(20,184,166,.3);background:rgba(20,184,166,.1);color:#5eead4;padding:2px 6px;font-size:12px">{{ w.source }}</span>
+<code style="font-size:12px;color:#64748b;font-family:'JetBrains Mono',monospace">{{ w.sha }}</code>
+</div>
+</td>
+<td style="padding:12px 16px;text-align:right;color:#cbd5e1">{{ w.epochs }}</td>
+<td style="padding:12px 16px;text-align:right;color:#cbd5e1">{{ w.size }}</td>
+<td style="padding:12px 16px;text-align:right;font-family:'JetBrains Mono',monospace;color:#e2e8f0">{{ w.map50 }}</td>
+<td style="padding:12px 16px;text-align:right;font-family:'JetBrains Mono',monospace;color:#e2e8f0">{{ w.micro }}</td>
+<td style="padding:12px 16px;text-align:right;color:#cbd5e1">{{ w.evals }}</td>
+<td style="padding:12px 16px;text-align:right;font-size:12px;color:#94a3b8">{{ w.last }}</td>
+<td style="padding:12px 16px;text-align:right"><button style="border-radius:4px;padding:6px;color:#64748b;background:none;border:none;cursor:pointer"><i data-lucide="trash-2" style="font-size:16px"></i></button></td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</div>
+</sc-if>
+
+</main>
+
+<footer style="position:relative;z-index:10;padding:24px 0;border-top:1px solid rgba(255,255,255,.05);background:rgba(2,6,23,.4);backdrop-filter:blur(4px)">
+<div style="max-width:1280px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+<p style="margin:0;font-size:10px;color:#6b7280;font-family:'JetBrains Mono',monospace">© 2026 Citrus Multi-Format (YOLO / SSD) Diagnosis Dashboard. Connected to FastAPI Core &amp; PyTorch Engine.</p>
+<div style="display:flex;align-items:center;gap:16px;font-size:10px;color:#9ca3af;font-family:'JetBrains Mono',monospace">
+<span style="display:flex;align-items:center;gap:4px"><i data-lucide="check-circle-2" style="font-size:14px;color:#10b981"></i> WebRTC Secure</span>
+<span style="color:#4b5563">|</span>
+<span style="display:flex;align-items:center;gap:4px"><i data-lucide="sparkles" style="font-size:14px;color:#fb923c"></i> GPU HyperThreaded</span>
+</div>
+</div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1000}}">
+class Component extends DCLogic {
+  state = { tab: 'init' };
+
+  componentDidMount() { this.icons(); }
+  componentDidUpdate() { this.icons(); }
+  icons() {
+    if (window.lucide) { try { window.lucide.createIcons(); } catch (e) {} }
+    else setTimeout(() => this.icons(), 200);
+  }
+
+  tabStyle(key, from, to, glow) {
+    const base = 'display:flex;align-items:center;gap:8px;padding:10px 16px;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer;font-family:inherit;';
+    return this.state.tab === key
+      ? base + `background:linear-gradient(to right,${from},${to});color:#fff;box-shadow:0 0 25px 4px ${glow}`
+      : base + 'background:none;color:#9ca3af';
+  }
+
+  renderVals() {
+    const t = (k) => () => this.setState({ tab: k });
+    return {
+      isInit: this.state.tab === 'init',
+      isMetrics: this.state.tab === 'metrics',
+      isDemo: this.state.tab === 'demo',
+      isDataset: this.state.tab === 'dataset',
+      isEvaluate: this.state.tab === 'evaluate',
+      isRegistry: this.state.tab === 'registry',
+      goInit: t('init'), goMetrics: t('metrics'), goDemo: t('demo'),
+      goDataset: t('dataset'), goEvaluate: t('evaluate'), goRegistry: t('registry'),
+      tabInit: this.tabStyle('init', '#14b8a6', '#059669', 'rgba(16,185,129,.18)'),
+      tabMetrics: this.tabStyle('metrics', '#6366f1', '#9333ea', 'rgba(99,102,241,.18)'),
+      tabDemo: this.tabStyle('demo', '#f97316', '#f59e0b', 'rgba(249,115,22,.18)'),
+      tabDataset: this.tabStyle('dataset', '#f43f5e', '#db2777', 'rgba(244,63,94,.18)'),
+      tabEvaluate: this.tabStyle('evaluate', '#06b6d4', '#2563eb', 'rgba(6,182,212,.18)'),
+      tabRegistry: this.tabStyle('registry', '#10b981', '#0d9488', 'rgba(16,185,129,.18)'),
+
+      metricOpts: [
+        { name: '訓練 Box 損失 (Train Box Loss)', desc: '邊界框擬合精準度收斂值' },
+        { name: '訓練 Class 損失 (Train Class Loss)', desc: '類別分類交叉熵收斂速度' },
+        { name: '訓練 DFL 損失 (Train DFL Loss)', desc: '邊界框機率分佈收斂指標' },
+        { name: '驗證 Box 損失 (Val Box Loss)', desc: '驗證集邊界框損失（防過擬合）' },
+        { name: '精確率 (Precision)', desc: '預測為正樣本中真實為正的比例' },
+        { name: '召回率 (Recall)', desc: '真實正樣本中成功偵測出的比例' },
+        { name: '平均精度 mAP@50', desc: 'IoU=0.5 條件下的平均精確度' },
+        { name: '平均精度 mAP@50:95', desc: '嚴格跨 IoU 閾值之綜合精度' }
+      ],
+      chartSections: [
+        { name: '訓練 Box 損失 (Train Box Loss)', desc: '邊界框擬合精準度收斂值' },
+        { name: '精確率 (Precision)', desc: '預測為正樣本中真實為正的比例' },
+        { name: '平均精度 mAP@50', desc: 'IoU=0.5 條件下的平均精確度' }
+      ],
+      demoCards: [
+        { filename: 'IMG_2481.jpg', counts: 3, tagA: '柑橘潛葉蛾: 2', tagB: '葉部黃化: 1' },
+        { filename: 'IMG_2483.jpg', counts: 5, tagA: '介殼蟲: 3', tagB: '煤煙病: 2' },
+        { filename: 'IMG_2490.jpg', counts: 1, tagA: '木蝨: 1', tagB: '無其他病徵: 0' },
+        { filename: 'IMG_2502.jpg', counts: 4, tagA: '柑橘紅蜘蛛: 2', tagB: '潰瘍病斑: 2' }
+      ],
+      dsCards: [
+        { en: 'Total Images', value: '4,463', label: '影像總數', sub: '3 個資料分割' },
+        { en: 'Total Annotations', value: '11,208', label: '標註總數', sub: '平均每張 2.51 個標註' },
+        { en: 'Classes', value: '8', label: '類別數', sub: 'data.yaml 宣告 nc = 8' },
+        { en: 'Background Samples', value: '214', label: '空標註影像', sub: '佔 4.8%．負樣本用於降低假陽性' }
+      ],
+      classRows: [
+        { name: '柑橘潛葉蛾 leafminer', ann: '3,104', img: '1,882', pct: '27.7%', area: '0.0121' },
+        { name: '介殼蟲 scale', ann: '2,410', img: '1,455', pct: '21.5%', area: '0.0064' },
+        { name: '柑橘紅蜘蛛 mite', ann: '1,986', img: '1,201', pct: '17.7%', area: '0.0033' },
+        { name: '煤煙病 sooty mold', ann: '1,502', img: '968', pct: '13.4%', area: '0.0288' },
+        { name: '潰瘍病 canker', ann: '1,088', img: '742', pct: '9.7%', area: '0.0176' }
+      ],
+      evalRows: [
+        { name: '柑橘潛葉蛾 leafminer', ap50: '0.912', ap: '0.641', recall: '0.874', area: '0.0121' },
+        { name: '介殼蟲 scale', ap50: '0.884', ap: '0.602', recall: '0.841', area: '0.0064' },
+        { name: '柑橘紅蜘蛛 mite', ap50: '0.771', ap: '0.463', recall: '0.702', area: '0.0033' },
+        { name: '煤煙病 sooty mold', ap50: '0.905', ap: '0.618', recall: '0.858', area: '0.0288' },
+        { name: '潰瘍病 canker', ap50: '0.862', ap: '0.577', recall: '0.803', area: '0.0176' }
+      ],
+      bestRows: [
+        { metric: 'mAP@50', value: '0.8672', who: 'YOLOv8n · e300 · mosaic on · citrus_v4 / test' },
+        { metric: 'mAP@50-95', value: '0.5841', who: 'YOLOv8n · e300 · mosaic on · citrus_v4 / test' },
+        { metric: 'Micro-Accuracy', value: '0.7412', who: 'YOLOv8s · e300 · citrus_v4 / test' }
+      ],
+      weightRows: [
+        { name: 'YOLOv8n · e300 · mosaic on', arch: 'yolo', source: 'LocalLibrary', sha: '6f2a1c9d', epochs: '300', size: '6.2 MB', map50: '0.8672', micro: '0.7284', evals: '6', last: '08-30 21:14' },
+        { name: 'YOLOv8s · e300 · no mosaic', arch: 'yolo', source: 'LocalLibrary', sha: 'a04be731', epochs: '300', size: '21.5 MB', map50: '0.8611', micro: '0.7412', evals: '5', last: '08-30 19:48' },
+        { name: 'YOLOv8n · e150', arch: 'yolo', source: '上傳 ZIP', sha: 'c19f80b2', epochs: '150', size: '6.2 MB', map50: '0.8104', micro: '0.6903', evals: '4', last: '08-29 15:20' },
+        { name: 'ssdlite_small · e120', arch: 'ssdlite_small', source: 'LocalLibrary', sha: 'd7e3aa15', epochs: '120', size: '14.1 MB', map50: '0.6014', micro: '0.5122', evals: '3', last: '08-28 11:03' },
+        { name: 'YOLOv8n · e300 · albument', arch: 'yolo', source: '上傳權重', sha: 'ff0912cd', epochs: '300', size: '6.2 MB', map50: '0.8549', micro: '0.7190', evals: '2', last: '08-27 22:41' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
