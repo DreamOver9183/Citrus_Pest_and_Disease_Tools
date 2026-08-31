@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/nocturne-b91484fa-dae0-4459-88a4-bf8c7832cdc4/styles.css">
+<script src="_ds/nocturne-b91484fa-dae0-4459-88a4-bf8c7832cdc4/_ds_bundle.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<style>
+body{margin:0;background:color-mix(in srgb, var(--color-bg) 82%, #000);font-family:'Inter','Noto Sans TC',system-ui,sans-serif}
+a{color:var(--color-accent);text-decoration:none}a:hover{color:var(--color-accent-400)}
+.dv-turn{padding:40px 44px 32px;border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent)}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-text);color:var(--color-bg);border-radius:4px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 'Inter','Noto Sans TC',sans-serif;color:var(--color-text)}
+.dv-opts{display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:10px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:color-mix(in srgb, var(--color-text) 10%, transparent);color:var(--color-text);border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.4 'Inter','Noto Sans TC',sans-serif;color:var(--color-neutral-500)}
+.dv-card{background:var(--color-bg);border:1px solid var(--color-neutral-800);border-radius:var(--radius-md);overflow:hidden;box-shadow:var(--shadow-md)}
+.dv-opt:target .dv-oid{background:var(--color-accent);color:var(--color-bg)}
+.dv-next{margin:22px 0 0;font:12px/1.6 'Inter','Noto Sans TC',sans-serif;color:var(--color-neutral-600)}
+.n-tab{padding:9px 2px;font-size:13px;color:var(--color-neutral-500);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;font-family:inherit}
+.n-tab-on{color:var(--color-text);border-bottom-color:var(--color-accent)}
+.n-row{display:grid;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent)}
+.n-num{font-variant-numeric:tabular-nums;font-size:13px;color:var(--color-text)}
+.n-lbl{font-size:11px;color:var(--color-neutral-600);letter-spacing:.04em}
+.n-mark{width:18px;height:2px;background:var(--color-accent);display:block}
+.btn,.seg-opt,.n-tab{white-space:nowrap}
+</style>
+</helmet>
+
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">合併版 — 1b 表格優先 ＋ 1a 設定抽屜 ＋ 新增「摘要」分頁（1c 的內容）</span></div>
+
+<div style="max-width:820px;margin:0 0 28px;color:var(--color-neutral-400);font-size:13px;line-height:1.8">
+<p style="margin:0">主體是 <a href="#1b">1b</a> 的整頁資料表：常駐左欄取消，來源、掃描結果、推論裝置改成 <a href="#1a">1a</a> 的右側抽屜，用頂列「設定」開關。<a href="#1c">1c</a> 的四個結論數字與折疊分區不再擠進模型頁，改成第一個分頁「摘要」。<span style="color:var(--color-text)">下面的分頁可以點</span>。</p>
+</div>
+
+<div class="dv-opts">
+<div class="dv-opt" id="2a">
+<div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>摘要分頁 ＋ 表格工作台 ＋ 設定抽屜</div>
+<div class="dv-card" style="width:1180px">
+
+<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid var(--color-neutral-800);background:color-mix(in srgb, var(--color-surface) 52%, var(--color-bg))">
+<div style="display:flex;align-items:center;gap:11px">
+<div style="width:24px;height:24px;border:1px solid var(--color-accent);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--color-accent)"><i class="ph ph-leaf" style="font-size:14px"></i></div>
+<span style="font-size:13px;font-weight:500;color:var(--color-text)">柑橘病蟲害工具包</span>
+</div>
+<div style="display:flex;align-items:center;gap:14px;font-size:12px;color:var(--color-neutral-500)">
+<span>裝置 <span style="color:var(--color-text)">CUDA:0</span></span>
+<span>插槽 <span style="color:var(--color-text)">2/3</span></span>
+<button class="btn btn-ghost" style="font-size:12px" onClick="{{ toggleDrawer }}"><i class="ph ph-sliders-horizontal"></i> 設定</button>
+</div>
+</div>
+
+<div style="display:flex;gap:22px;padding:0 20px;border-bottom:1px solid var(--color-neutral-800)">
+<sc-for list="{{ tabs }}" as="t" hint-placeholder-count="7">
+<button class="{{ t.cls }}" onClick="{{ t.go }}">{{ t.label }}</button>
+</sc-for>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr auto;align-items:start;padding:22px 20px 28px;background:var(--color-bg);min-height:600px">
+
+<sc-if value="{{ onModels }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<h3 style="margin:0;font-size:17px;color:var(--color-text)">已載入模型 <span style="color:var(--color-neutral-600);font-size:13px">2 / 3 插槽</span></h3>
+<div style="display:flex;align-items:center;gap:10px">
+<span style="font-size:12px;color:var(--color-neutral-600)">依 mAP@50 排序</span>
+<button class="btn btn-ghost" style="font-size:12px"><i class="ph ph-arrows-down-up"></i></button>
+</div>
+</div>
+
+<table class="table" style="font-size:13px">
+<thead><tr>
+<th style="text-align:left">名稱</th><th>架構</th><th>來源</th><th style="text-align:right">Epochs</th><th style="text-align:right">大小</th><th style="text-align:right">mAP@50</th><th style="text-align:right">mAP@50-95</th><th style="text-align:right">匯出</th><th></th>
+</tr></thead>
+<tbody>
+<sc-for list="{{ rows2a }}" as="r" hint-placeholder-count="3">
+<tr>
+<td style="text-align:left"><div style="color:var(--color-text)">{{ r.name }}</div><code style="font-size:11px;color:var(--color-neutral-600)">{{ r.sha }}</code></td>
+<td><span class="tag tag-outline" style="font-size:10px">{{ r.arch }}</span></td>
+<td style="color:var(--color-neutral-500);font-size:12px">{{ r.src }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums">{{ r.epochs }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums">{{ r.size }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--color-accent-400)">{{ r.map50 }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums">{{ r.map }}</td>
+<td style="text-align:right;color:var(--color-neutral-500)">{{ r.exp }}</td>
+<td style="text-align:right;color:var(--color-neutral-600)"><i class="ph ph-dots-three"></i></td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+
+<div>
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px">
+<h3 style="margin:0;font-size:16px;color:var(--color-text)">格式轉換</h3>
+<span style="font-size:12px;color:var(--color-neutral-600)">僅 YOLO（.pt）可轉換</span>
+</div>
+<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--color-neutral-800);border-radius:var(--radius-md)">
+<select class="input" style="width:230px;font-size:13px"><option>YOLOv8n · e300 · mosaic on</option></select>
+<select class="input" style="width:190px;font-size:13px"><option>ONNX</option><option>TFLite（需 Docker）</option></select>
+<button class="btn btn-primary" style="font-size:13px">開始轉換</button>
+<span style="font-size:12px;color:var(--color-neutral-600);margin-left:auto">上次：best.onnx · 12.4 MB · 8 秒</span>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ onSummary }}">
+<div style="display:flex;flex-direction:column;gap:0;max-width:960px">
+<div style="display:flex;align-items:flex-start;gap:56px;margin-bottom:4px">
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">已載入模型</div><div style="font-size:30px;color:var(--color-text);font-variant-numeric:tabular-nums;letter-spacing:-.02em">2<span style="font-size:15px;color:var(--color-neutral-600)"> / 3</span></div></div>
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">最佳 mAP@50</div><div style="font-size:30px;color:var(--color-accent-400);font-variant-numeric:tabular-nums;letter-spacing:-.02em">0.867</div></div>
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">推論裝置</div><div style="font-size:20px;color:var(--color-text);margin-top:9px">CUDA:0 RTX 4060</div></div>
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">登錄簿</div><div style="font-size:20px;color:var(--color-text);margin-top:9px">14 顆權重 · 37 次實測</div></div>
+</div>
+<div class="hr" style="margin:26px 0 4px"></div>
+
+<div style="padding:14px 0 10px;border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent)">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+<div style="display:flex;align-items:center;gap:10px"><i class="ph ph-caret-down" style="color:var(--color-accent)"></i><span style="font-size:14px;color:var(--color-text)">本次比較的模型</span></div>
+<button class="btn btn-ghost" style="font-size:12px" onClick="{{ goModels }}">到模型頁 <i class="ph ph-arrow-right"></i></button>
+</div>
+<div class="n-row" style="grid-template-columns:1fr 92px 104px 96px;border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent);padding-top:0">
+<span class="n-lbl">名稱</span><span class="n-lbl" style="text-align:right">Epochs</span><span class="n-lbl" style="text-align:right">mAP@50-95</span><span class="n-lbl" style="text-align:right">mAP@50</span>
+</div>
+<sc-for list="{{ rows2a }}" as="r" hint-placeholder-count="3">
+<div class="n-row" style="grid-template-columns:1fr 92px 104px 96px">
+<span style="font-size:13px;color:var(--color-text)">{{ r.name }}</span>
+<span class="n-num" style="text-align:right">{{ r.epochs }}</span>
+<span class="n-num" style="text-align:right">{{ r.map }}</span>
+<span class="n-num" style="text-align:right;color:var(--color-accent-400)">{{ r.map50 }}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent)">
+<div style="display:flex;align-items:center;gap:10px"><i class="ph ph-caret-right" style="color:var(--color-neutral-600)"></i><span style="font-size:14px;color:var(--color-text)">載入模型權重</span><span style="font-size:12px;color:var(--color-neutral-600)">上傳 · 本機資料夾掃描</span></div>
+<span style="font-size:12px;color:var(--color-neutral-600)">還有 1 個插槽</span>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent)">
+<div style="display:flex;align-items:center;gap:10px"><i class="ph ph-caret-right" style="color:var(--color-neutral-600)"></i><span style="font-size:14px;color:var(--color-text)">推論裝置</span></div>
+<span style="font-size:12px;color:var(--color-neutral-600)">CUDA:0 · VRAM 1.2 / 8.0 GB</span>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent)">
+<div style="display:flex;align-items:center;gap:10px"><i class="ph ph-caret-right" style="color:var(--color-neutral-600)"></i><span style="font-size:14px;color:var(--color-text)">本機資料夾</span></div>
+<span style="font-size:12px;color:var(--color-neutral-600)">4 個權重 · 2 個資料集</span>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent)">
+<div style="display:flex;align-items:center;gap:10px"><i class="ph ph-caret-right" style="color:var(--color-neutral-600)"></i><span style="font-size:14px;color:var(--color-text)">權重登錄簿</span></div>
+<span style="font-size:12px;color:var(--color-neutral-600)">最近一次：2026-08-28 · citrus_v4</span>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ onMetrics }}">
+<div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<h3 style="margin:0;font-size:17px;color:var(--color-text)">消融分析 <span style="color:var(--color-neutral-600);font-size:13px">2 個模型 · 4 項指標</span></h3>
+<span style="font-size:12px;color:var(--color-neutral-600)">左欄勾選要比較的指標</span>
+</div>
+
+<div class="n-row" style="grid-template-columns:1fr 1fr;gap:16px;padding:0 0 16px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font-size:13px;color:var(--color-text)">YOLOv8n · e300 · mosaic on</span><code style="font-size:11px;color:var(--color-neutral-600)">confusion_matrix.png</code></div>
+<div style="height:210px;border:1px dashed var(--color-neutral-800);border-radius:var(--radius-md);background:color-mix(in srgb, var(--color-bg) 92%, #000);display:flex;align-items:center;justify-content:center;color:var(--color-neutral-600);font-size:11px">正規化混淆矩陣（佔位）</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font-size:13px;color:var(--color-text)">SSDLite-Small · e120</span><code style="font-size:11px;color:var(--color-neutral-600)">無此圖</code></div>
+<div style="height:210px;border:1px solid var(--color-neutral-800);border-radius:var(--radius-md);background:color-mix(in srgb, var(--color-bg) 96%, #000);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--color-neutral-600);font-size:11px;text-align:center;padding:16px"><i class="ph ph-image-broken" style="font-size:22px"></i>單一權重檔格式沒有訓練期的驗證矩陣</div>
+</div>
+</div>
+
+<sc-for list="{{ chartSections }}" as="c" hint-placeholder-count="3">
+<div style="border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent);padding-bottom:16px">
+<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px"><span class="n-mark" style="margin-bottom:4px"></span><span style="font-size:14px;color:var(--color-text)">{{ c.name }}</span><span style="font-size:12px;color:var(--color-neutral-600)">{{ c.desc }}</span></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+<div style="height:120px;border:1px dashed var(--color-neutral-800);border-radius:var(--radius-md);background:color-mix(in srgb, var(--color-bg) 92%, #000);display:flex;align-items:center;justify-content:center;color:var(--color-neutral-600);font-size:11px">YOLOv8n（佔位）</div>
+<div style="height:120px;border:1px dashed var(--color-neutral-800);border-radius:var(--radius-md);background:color-mix(in srgb, var(--color-bg) 92%, #000);display:flex;align-items:center;justify-content:center;color:var(--color-neutral-600);font-size:11px">SSDLite（佔位）</div>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ onDemo }}">
+<div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<h3 style="margin:0;font-size:17px;color:var(--color-text)">即時巡檢報告 <span style="color:var(--color-neutral-600);font-size:13px">隨機 4 張 / 32 張</span></h3>
+<span style="font-size:12px;color:var(--color-neutral-600)">YOLOv8n · conf 0.35 · GPU</span>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+<sc-for list="{{ demoCards }}" as="d" hint-placeholder-count="4">
+<div style="border:1px solid var(--color-neutral-800);border-radius:var(--radius-md);overflow:hidden;display:flex;flex-direction:column">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-bottom:1px solid var(--color-neutral-800)">
+<code style="font-size:11px;color:var(--color-text)">{{ d.filename }}</code>
+<div style="display:flex;align-items:center;gap:8px"><button class="btn btn-ghost" style="font-size:11px">對照原圖</button><button class="btn btn-icon" style="color:var(--color-neutral-500)"><i class="ph ph-arrows-out" style="font-size:13px"></i></button></div>
+</div>
+<div style="height:186px;background:color-mix(in srgb, var(--color-bg) 92%, #000);display:flex;align-items:center;justify-content:center;color:var(--color-neutral-600);font-size:11px">標註後影像（佔位）</div>
+<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--color-neutral-800)">
+<span style="font-size:12px;color:var(--color-neutral-500)">檢出 <span style="color:var(--color-accent-400);font-variant-numeric:tabular-nums">{{ d.counts }}</span></span>
+<span class="tag tag-outline" style="font-size:10px">{{ d.tagA }}</span>
+<span class="tag tag-neutral" style="font-size:10px">{{ d.tagB }}</span>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ onDataset }}">
+<div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<h3 style="margin:0;font-size:17px;color:var(--color-text)">citrus_v4_yolo.zip <span style="color:var(--color-neutral-600);font-size:13px">根目錄 citrus_v4/</span></h3>
+<div style="display:flex;align-items:center;gap:6px"><span class="tag tag-outline" style="font-size:10px">YOLO</span><span class="tag tag-neutral" style="font-size:10px">深度分析 · 不解壓縮</span></div>
+</div>
+
+<div style="display:flex;align-items:flex-start;gap:44px;flex-wrap:wrap">
+<sc-for list="{{ dsCards }}" as="k" hint-placeholder-count="4">
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">{{ k.label }}</div><div style="font-size:26px;color:var(--color-text);font-variant-numeric:tabular-nums;letter-spacing:-.02em">{{ k.value }}</div><div style="font-size:11px;color:var(--color-neutral-600);margin-top:2px">{{ k.sub }}</div></div>
+</sc-for>
+</div>
+
+<div class="n-row" style="grid-template-columns:repeat(4,1fr);padding:12px 0">
+<div><div class="n-lbl">壓縮檔大小</div><div class="n-num" style="margin-top:3px">612.4 MB</div></div>
+<div><div class="n-lbl">解壓後大小</div><div class="n-num" style="margin-top:3px">638.1 MB</div></div>
+<div><div class="n-lbl">成員數</div><div class="n-num" style="margin-top:3px">8,931</div></div>
+<div><div class="n-lbl">分析耗時</div><div class="n-num" style="margin-top:3px">0.84 秒</div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+<div style="display:flex;flex-direction:column;gap:8px"><span class="n-lbl">SPLIT 組成</span><div style="height:170px;border:1px dashed var(--color-neutral-800);border-radius:var(--radius-md);background:color-mix(in srgb, var(--color-bg) 92%, #000);display:flex;align-items:center;justify-content:center;color:var(--color-neutral-600);font-size:11px">堆疊長條圖（佔位）</div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span class="n-lbl">標註密度</span><div style="height:170px;border:1px dashed var(--color-neutral-800);border-radius:var(--radius-md);background:color-mix(in srgb, var(--color-bg) 92%, #000);display:flex;align-items:center;justify-content:center;color:var(--color-neutral-600);font-size:11px">折線圖（佔位）</div></div>
+</div>
+
+<div>
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px"><h3 style="margin:0;font-size:16px;color:var(--color-text)">類別分佈</h3><span style="font-size:12px;color:var(--color-neutral-600)">檔名類別交叉檢查 4,401 / 4,463 相符</span></div>
+<table class="table" style="font-size:13px">
+<thead><tr><th style="text-align:left">類別</th><th style="text-align:right">標註數</th><th style="text-align:right">影像數</th><th style="text-align:right">佔比</th><th style="text-align:right">中位框面積</th></tr></thead>
+<tbody>
+<sc-for list="{{ classRows }}" as="r" hint-placeholder-count="5">
+<tr>
+<td style="text-align:left;color:var(--color-text)">{{ r.name }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums">{{ r.ann }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums">{{ r.img }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--color-accent-400)">{{ r.pct }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--color-neutral-500)">{{ r.area }}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ onEvaluate }}">
+<div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<h3 style="margin:0;font-size:17px;color:var(--color-text)">評估紀錄 <span style="color:var(--color-neutral-600);font-size:13px">3 筆 · 同一份測試集可直接比較</span></h3>
+<button class="btn btn-ghost" style="font-size:12px"><i class="ph ph-file-text"></i> 產生 HTML 報告（2）</button>
+</div>
+
+<div class="n-row" style="grid-template-columns:24px 1fr 120px 96px 96px 72px 72px;padding:12px 0">
+<input type="checkbox" checked style="accent-color:var(--color-accent)">
+<div><div style="font-size:13px;color:var(--color-text)">YOLOv8n · e300 · mosaic on</div><code style="font-size:11px;color:var(--color-neutral-600)">citrus_v4 / test · 445 張 · 3 分 52 秒</code></div>
+<span class="tag tag-outline" style="font-size:10px;justify-self:start">完成</span>
+<span class="n-num" style="text-align:right;color:var(--color-accent-400)">0.867</span>
+<span class="n-num" style="text-align:right">0.584</span>
+<span class="n-num" style="text-align:right">P 0.881</span>
+<span class="n-num" style="text-align:right">R 0.812</span>
+</div>
+<div class="n-row" style="grid-template-columns:24px 1fr 360px;padding:12px 0">
+<input type="checkbox" style="accent-color:var(--color-accent)">
+<div><div style="font-size:13px;color:var(--color-text)">YOLOv8s · e300 · no mosaic</div><code style="font-size:11px;color:var(--color-neutral-600)">citrus_v4 / test · 268 / 445 · 2 分 11 秒</code></div>
+<div style="display:flex;align-items:center;gap:10px"><div style="flex:1;height:3px;border-radius:2px;background:color-mix(in srgb, var(--color-text) 10%, transparent);overflow:hidden"><div style="width:60%;height:100%;background:var(--color-accent)"></div></div><span style="font-size:11px;color:var(--color-neutral-600)">推論中</span></div>
+</div>
+
+<div>
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px"><h3 style="margin:0;font-size:16px;color:var(--color-text)">YOLOv8n · e300 · mosaic on ／ citrus_v4 test</h3><span style="font-size:12px;color:var(--color-neutral-600)">conf 0.25 · IoU 0.45</span></div>
+<div style="display:flex;align-items:flex-start;gap:48px;margin-bottom:20px">
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">mAP@50</div><div style="font-size:26px;color:var(--color-accent-400);font-variant-numeric:tabular-nums">0.867</div></div>
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">mAP@50-95</div><div style="font-size:26px;color:var(--color-text);font-variant-numeric:tabular-nums">0.584</div></div>
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">Micro-Acc</div><div style="font-size:26px;color:var(--color-text);font-variant-numeric:tabular-nums">0.741</div></div>
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">F1</div><div style="font-size:26px;color:var(--color-text);font-variant-numeric:tabular-nums">0.845</div></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px">
+<div style="height:170px;border:1px dashed var(--color-neutral-800);border-radius:var(--radius-md);background:color-mix(in srgb, var(--color-bg) 92%, #000);display:flex;align-items:center;justify-content:center;color:var(--color-neutral-600);font-size:11px">PR 曲線（佔位）</div>
+<div style="height:170px;border:1px dashed var(--color-neutral-800);border-radius:var(--radius-md);background:color-mix(in srgb, var(--color-bg) 92%, #000);display:flex;align-items:center;justify-content:center;color:var(--color-neutral-600);font-size:11px">AP × 框尺寸散點圖（佔位）</div>
+</div>
+<table class="table" style="font-size:13px">
+<thead><tr><th style="text-align:left">類別</th><th style="text-align:right">AP@50</th><th style="text-align:right">AP@50-95</th><th style="text-align:right">Recall</th><th style="text-align:right">中位框面積</th></tr></thead>
+<tbody>
+<sc-for list="{{ evalRows }}" as="e" hint-placeholder-count="5">
+<tr>
+<td style="text-align:left;color:var(--color-text)">{{ e.name }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--color-accent-400)">{{ e.ap50 }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums">{{ e.ap }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums">{{ e.recall }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--color-neutral-500)">{{ e.area }}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ onRegistry }}">
+<div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<h3 style="margin:0;font-size:17px;color:var(--color-text)">權重登錄簿 <span style="color:var(--color-neutral-600);font-size:13px">以 SHA-256 為身分的長期帳本</span></h3>
+<button class="btn btn-ghost" style="font-size:12px"><i class="ph ph-arrows-clockwise"></i> 重新整理</button>
+</div>
+
+<div style="display:flex;align-items:flex-start;gap:48px">
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">已記錄權重</div><div style="font-size:26px;color:var(--color-text);font-variant-numeric:tabular-nums">14</div></div>
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">訓練紀錄</div><div style="font-size:26px;color:var(--color-text);font-variant-numeric:tabular-nums">14</div></div>
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">實測次數</div><div style="font-size:26px;color:var(--color-text);font-variant-numeric:tabular-nums">37</div></div>
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">資料庫引擎</div><div style="font-size:20px;color:var(--color-text);margin-top:6px">postgresql · 3 個資料集</div></div>
+</div>
+
+<div style="display:flex;align-items:center;gap:12px">
+<div class="seg" style="display:flex">
+<button class="seg-opt" style="font-size:12px;color:var(--color-text);background:color-mix(in srgb, var(--color-accent) 16%, transparent)">權重清單 14</button>
+<button class="seg-opt" style="font-size:12px">指標帳本 37</button>
+</div>
+<input type="text" class="input" placeholder="搜尋權重名稱或檔名" style="max-width:280px;font-size:13px">
+</div>
+
+<table class="table" style="font-size:13px">
+<thead><tr>
+<th style="text-align:left">權重</th><th>來源</th><th style="text-align:right">Epochs</th><th style="text-align:right">大小</th><th style="text-align:right">最佳 mAP@50 ↓</th><th style="text-align:right">最佳 Micro-Acc</th><th style="text-align:right">評估次數</th><th style="text-align:right">最後出現</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{ weightRows }}" as="w" hint-placeholder-count="5">
+<tr>
+<td style="text-align:left"><div style="color:var(--color-text)">{{ w.name }}</div><code style="font-size:11px;color:var(--color-neutral-600)">{{ w.arch }} · {{ w.sha }}</code></td>
+<td style="color:var(--color-neutral-500);font-size:12px">{{ w.source }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums">{{ w.epochs }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums">{{ w.size }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--color-accent-400)">{{ w.map50 }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums">{{ w.micro }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums">{{ w.evals }}</td>
+<td style="text-align:right;color:var(--color-neutral-500);font-size:12px">{{ w.last }}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</sc-if>
+
+<div style="{{ drawerStyle }}">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<span style="font-size:13px;font-weight:500;color:var(--color-text)">設定</span>
+<button class="btn btn-icon" style="color:var(--color-neutral-500)" onClick="{{ toggleDrawer }}"><i class="ph ph-x" style="font-size:13px"></i></button>
+</div>
+<sc-if value="{{ onModels }}" hint-placeholder-val="{{ true }}">
+<div>
+<div class="n-lbl" style="margin-bottom:7px">來源</div>
+<code style="display:block;font-size:11px;color:var(--color-neutral-500);line-height:1.6;word-break:break-all">…/Citrus_Pest_and_Disease_Tools/LocalLibrary</code>
+<div style="display:flex;gap:6px;margin-top:9px">
+<button class="btn btn-secondary" style="font-size:12px;flex:1">重新掃描</button>
+<button class="btn btn-ghost" style="font-size:12px;flex:1">上傳</button>
+</div>
+</div>
+<div>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span class="n-lbl">掃描結果 6</span><span style="font-size:11px;color:var(--color-accent)">全選</span></div>
+<div style="display:flex;flex-direction:column">
+<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 6%, transparent);font-size:12px;color:var(--color-text)"><input type="checkbox" checked style="accent-color:var(--color-accent)">yolov8n_citrus_e300</label>
+<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 6%, transparent);font-size:12px;color:var(--color-text)"><input type="checkbox" style="accent-color:var(--color-accent)">yolov8s_e300_nomos</label>
+<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 6%, transparent);font-size:12px;color:var(--color-neutral-600)"><input type="checkbox" disabled>ssdlite_small_run.zip</label>
+<label style="display:flex;align-items:center;gap:8px;padding:7px 0;font-size:12px;color:var(--color-text)"><input type="checkbox" style="accent-color:var(--color-accent)">citrus_v4（資料集）</label>
+</div>
+<button class="btn btn-primary" style="font-size:12px;width:100%;margin-top:10px">載入選取（2）</button>
+</div>
+<div>
+<div class="n-lbl" style="margin-bottom:7px">推論裝置</div>
+<div class="seg" style="display:flex;gap:0">
+<button class="seg-opt" style="font-size:12px;flex:1">Auto</button>
+<button class="seg-opt" style="font-size:12px;flex:1;color:var(--color-text);background:color-mix(in srgb, var(--color-accent) 16%, transparent)">GPU</button>
+<button class="seg-opt" style="font-size:12px;flex:1">CPU</button>
+</div>
+<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--color-neutral-600)"><span>VRAM 1.2 / 8.0 GB</span><span>Compute 8.9</span></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ onMetrics }}">
+<div>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span class="n-lbl">對齊與消融指標</span><span style="font-size:11px;color:var(--color-accent)">取消全部</span></div>
+<div style="display:flex;flex-direction:column;max-height:300px;overflow-y:auto">
+<sc-for list="{{ metricOpts }}" as="m" hint-placeholder-count="8">
+<label style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 6%, transparent);font-size:12px;color:var(--color-text)">
+<input type="checkbox" checked style="accent-color:var(--color-accent);margin-top:2px">
+<span>{{ m.name }}</span>
+</label>
+</sc-for>
+</div>
+</div>
+<div>
+<div class="n-lbl" style="margin-bottom:7px">附加圖表</div>
+<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text)"><input type="checkbox" checked style="accent-color:var(--color-accent)">正規化混淆矩陣對比</label>
+</div>
+</sc-if>
+
+<sc-if value="{{ onDemo }}">
+<div>
+<div class="n-lbl" style="margin-bottom:7px">批次上傳影像</div>
+<div style="padding:18px;border:1px dashed var(--color-neutral-700);border-radius:var(--radius-md);text-align:center;color:var(--color-neutral-500);font-size:11px"><i class="ph ph-upload-simple" style="font-size:20px;display:block;margin-bottom:6px"></i>拖曳圖片或整包目錄</div>
+</div>
+<div>
+<div class="n-lbl" style="margin-bottom:7px">推理模型</div>
+<select class="input" style="width:100%;font-size:12px"><option>YOLOv8n · e300 · mosaic on</option><option>SSDLite-Small · e120</option></select>
+</div>
+<div>
+<div class="n-lbl" style="margin-bottom:7px">抽樣模式</div>
+<select class="input" style="width:100%;font-size:12px"><option>隨機 4 張並列</option><option>隨機 1 張檢驗</option><option>隨機 9 張矩陣</option><option>載入全部圖片</option></select>
+</div>
+<div>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span class="n-lbl">信心閾值</span><span class="n-num" style="color:var(--color-accent-400)">0.35</span></div>
+<input type="range" min="0.1" max="0.9" step="0.05" value="0.35" style="width:100%;accent-color:var(--color-accent)">
+</div>
+<button class="btn btn-primary" style="font-size:12px;width:100%">重新抽樣（32 張）</button>
+</sc-if>
+
+<sc-if value="{{ onDataset }}">
+<div>
+<div class="n-lbl" style="margin-bottom:7px">分析資料集</div>
+<div style="padding:18px;border:1px dashed var(--color-neutral-700);border-radius:var(--radius-md);text-align:center;color:var(--color-neutral-500);font-size:11px"><i class="ph ph-file-zip" style="font-size:20px;display:block;margin-bottom:6px"></i>拖入 ZIP · YOLO / COCO / VOC<br>全程不解壓縮</div>
+</div>
+<div>
+<div class="n-lbl" style="margin-bottom:8px">分析紀錄 2</div>
+<div style="display:flex;flex-direction:column">
+<div style="padding:8px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 6%, transparent);border-left:2px solid var(--color-accent);padding-left:9px"><div style="font-size:12px;color:var(--color-text)">citrus_v4_yolo.zip</div><code style="font-size:11px;color:var(--color-neutral-600)">YOLO · 4,463 張 · 08-30 21:14</code></div>
+<div style="padding:8px 0 8px 11px"><div style="font-size:12px;color:var(--color-neutral-500)">citrus_v3_coco.zip</div><code style="font-size:11px;color:var(--color-neutral-600)">COCO · 2,110 張 · 08-28 10:02</code></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ onEvaluate }}">
+<div>
+<div class="n-lbl" style="margin-bottom:7px">模型</div>
+<select class="input" style="width:100%;font-size:12px"><option>YOLOv8n · e300 · mosaic on</option><option>SSDLite-Small · e120（不支援）</option></select>
+</div>
+<div>
+<div class="n-lbl" style="margin-bottom:7px">資料集</div>
+<select class="input" style="width:100%;font-size:12px"><option>citrus_v4（LocalLibrary）</option><option>citrus_v4_yolo.zip（無法評估）</option></select>
+</div>
+<div>
+<div class="n-lbl" style="margin-bottom:7px">評估 Split</div>
+<div class="seg" style="display:flex;gap:0">
+<button class="seg-opt" style="font-size:12px;flex:1;color:var(--color-text);background:color-mix(in srgb, var(--color-accent) 16%, transparent)">test</button>
+<button class="seg-opt" style="font-size:12px;flex:1">valid</button>
+<button class="seg-opt" style="font-size:12px;flex:1">train</button>
+</div>
+</div>
+<button class="btn btn-primary" style="font-size:12px;width:100%">開始評估</button>
+<div style="font-size:11px;color:var(--color-neutral-600);line-height:1.7">445 張約 4 分鐘，切換分頁不影響進度。</div>
+</sc-if>
+
+<sc-if value="{{ onRegistry }}">
+<div>
+<div class="n-lbl" style="margin-bottom:8px">各指標的最佳紀錄</div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{ bestRows }}" as="b" hint-placeholder-count="3">
+<div style="padding:9px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 6%, transparent)">
+<div class="n-lbl">{{ b.metric }}</div>
+<div style="font-size:17px;color:var(--color-accent-400);font-variant-numeric:tabular-nums;margin-top:2px">{{ b.value }}</div>
+<div style="font-size:11px;color:var(--color-neutral-600);margin-top:2px">{{ b.who }}</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+</div>
+
+</div>
+</div>
+<sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+<ul style="margin:2px 0 0;padding-left:18px;max-width:1180px;color:var(--color-neutral-500);font-size:12px;line-height:1.9">
+<li>設定（來源、掃描結果、推論裝置）從 1b 的常駐左欄搬進右側抽屜，關掉後資料表拿到整個寬度。</li>
+<li>「摘要」是新分頁，放 1c 的四個結論數字與折疊分區；模型頁不再有摘要卡，避免兩份同樣的數字。</li>
+<li>摘要頁的比較列表用同一份資料，點「到模型頁」跳到可操作的完整表格。</li>
+<li>其餘五個分頁同一套規則：主欄放表格或圖表格線，設定與篩選（指標勾選、抽樣參數、ZIP 上傳、評估表單、最佳紀錄）一律進右側抽屜；圖表位置先留佔位框。</li>
+</ul>
+</sc-if>
+</div>
+</div>
+
+<p class="dv-next">接下來可以說：「把 <a class="dv-oid" href="#2a">2a</a> 套到其餘五個分頁」 · 「抽屜預設關閉」 · 「摘要頁再加上消融分析的圖」</p>
+</section>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">重新設計 UI 風格 — 三個方向（以「模型與裝置」為樣板畫面）</span></div>
+
+<div style="max-width:820px;margin:0 0 28px;color:var(--color-neutral-400);font-size:13px;line-height:1.8">
+<p style="margin:0 0 10px">三個方向都採用 Nocturne 深色系統：單一紫調重點色取代原本六色分頁與五種漸層、間距密度 0.70×、8px 圓角、分隔線用髮絲線而非玻璃卡片疊層。差別在<strong style="color:var(--color-text)">資訊架構</strong>：設定要放哪、資料怎麼呈現、說明文字收在哪。</p>
+<p style="margin:0">共同處理你提到的三個問題：<span style="color:var(--color-text)">① 顏色</span> 只留一個重點色，狀態靠深淺不靠色相；<span style="color:var(--color-text)">② 版面</span> 每個畫面只有一條主軸，卡片降為列表或表格；<span style="color:var(--color-text)">③ 灰色小字</span> 全部收進每區一個「說明」開關，預設收起。</p>
+</div>
+
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>單欄主軸 · 設定收進抽屜</div>
+<div class="dv-card" style="width:1080px">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--color-neutral-800)">
+<div style="display:flex;align-items:center;gap:11px">
+<div style="width:26px;height:26px;border:1px solid var(--color-accent);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--color-accent)"><i class="ph ph-leaf" style="font-size:15px"></i></div>
+<span style="font-size:14px;font-weight:500;color:var(--color-text)">柑橘病蟲害工具包</span>
+</div>
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font-size:12px;color:var(--color-neutral-500);display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent)"></span>CUDA:0 RTX 4060</span>
+<button class="btn btn-ghost" style="font-size:12px">說明</button>
+<button class="btn btn-secondary" style="font-size:12px">設定</button>
+</div>
+</div>
+<div style="display:flex;gap:24px;padding:0 24px;border-bottom:1px solid var(--color-neutral-800)">
+<button class="n-tab n-tab-on">模型與裝置</button>
+<button class="n-tab">消融分析</button>
+<button class="n-tab">即時診斷</button>
+<button class="n-tab">資料集</button>
+<button class="n-tab">驗證評估</button>
+<button class="n-tab">權重登錄簿</button>
+</div>
+<div style="position:relative;padding:28px 24px 32px;background:var(--color-bg);min-height:560px">
+<div style="max-width:672px">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:6px">
+<div>
+<h2 style="margin:0;font-size:22px;color:var(--color-text)">已載入的模型</h2>
+<span class="n-lbl">2／3 個插槽</span>
+</div>
+<div style="display:flex;gap:8px">
+<button class="btn btn-ghost" style="font-size:13px"><i class="ph ph-folder-open"></i> 從本機資料夾載入</button>
+<button class="btn btn-primary" style="font-size:13px"><i class="ph ph-upload-simple"></i> 載入權重</button>
+</div>
+</div>
+<div class="hr" style="margin:14px 0 4px"></div>
+
+<div class="n-row" style="grid-template-columns:1fr 96px 96px 108px 92px 28px;border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent)">
+<span class="n-lbl">名稱</span><span class="n-lbl" style="text-align:right">Epochs</span><span class="n-lbl" style="text-align:right">大小</span><span class="n-lbl" style="text-align:right">mAP@50-95</span><span class="n-lbl" style="text-align:right">mAP@50</span><span></span>
+</div>
+
+<div class="n-row" style="grid-template-columns:1fr 96px 96px 108px 92px 28px">
+<div>
+<div style="font-size:14px;color:var(--color-text);font-weight:500">YOLOv8n · e300 · mosaic on</div>
+<div style="display:flex;align-items:center;gap:7px;margin-top:5px">
+<span class="tag tag-outline" style="font-size:10px">yolo</span>
+<span class="tag tag-neutral" style="font-size:10px">本機資料夾</span>
+<code style="font-size:11px;color:var(--color-neutral-600)">6f2a1c9d</code>
+</div>
+</div>
+<span class="n-num" style="text-align:right">300</span>
+<span class="n-num" style="text-align:right">6.2 MB</span>
+<span class="n-num" style="text-align:right">0.5841</span>
+<span class="n-num" style="text-align:right;color:var(--color-accent-400)">0.8672</span>
+<button class="btn btn-icon" style="justify-self:end;color:var(--color-neutral-600)"><i class="ph ph-caret-down"></i></button>
+</div>
+
+<div style="background:color-mix(in srgb, var(--color-surface) 52%, var(--color-bg));border-left:2px solid var(--color-accent);padding:16px 18px;margin:0 0 4px;display:flex;flex-direction:column;gap:14px">
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+<div><div class="n-lbl">來源檔案</div><div class="n-num" style="margin-top:3px">best.pt</div></div>
+<div><div class="n-lbl">優化器</div><div class="n-num" style="margin-top:3px">AdamW</div></div>
+<div><div class="n-lbl">影像尺寸</div><div class="n-num" style="margin-top:3px">640 × 640</div></div>
+<div><div class="n-lbl">工作區</div><div class="n-num" style="margin-top:3px;color:var(--color-neutral-500)">extracted_runs/6f2a…</div></div>
+</div>
+<div style="display:flex;align-items:center;gap:10px">
+<select class="input" style="width:200px;font-size:13px"><option>ONNX (.onnx)</option><option>TFLite / LiteRT（需 Docker）</option></select>
+<button class="btn btn-primary" style="font-size:13px">轉換並下載</button>
+<button class="btn btn-ghost" style="font-size:13px;margin-left:auto;color:var(--color-neutral-500)"><i class="ph ph-trash"></i> 移除模型</button>
+</div>
+</div>
+
+<div class="n-row" style="grid-template-columns:1fr 96px 96px 108px 92px 28px">
+<div>
+<div style="font-size:14px;color:var(--color-text);font-weight:500">SSDLite-Small · e120</div>
+<div style="display:flex;align-items:center;gap:7px;margin-top:5px">
+<span class="tag tag-outline" style="font-size:10px">ssdlite</span>
+<span class="tag tag-neutral" style="font-size:10px">上傳</span>
+<code style="font-size:11px;color:var(--color-neutral-600)">d7e3aa15</code>
+</div>
+</div>
+<span class="n-num" style="text-align:right">120</span>
+<span class="n-num" style="text-align:right">14.1 MB</span>
+<span class="n-num" style="text-align:right">0.3120</span>
+<span class="n-num" style="text-align:right;color:var(--color-accent-400)">0.6014</span>
+<button class="btn btn-icon" style="justify-self:end;color:var(--color-neutral-600)"><i class="ph ph-caret-right"></i></button>
+</div>
+
+<div style="margin-top:22px;display:flex;align-items:center;gap:8px;color:var(--color-neutral-600);font-size:12px;cursor:pointer">
+<i class="ph ph-question" style="font-size:15px"></i>這個頁面怎麼用？（3 則說明）
+</div>
+</div>
+
+<div style="position:absolute;top:104px;right:20px;width:280px;background:var(--color-surface);border:1px solid var(--color-neutral-700);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);padding:16px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<span style="font-size:13px;font-weight:500;color:var(--color-text)">設定</span>
+<i class="ph ph-x" style="font-size:14px;color:var(--color-neutral-500)"></i>
+</div>
+<div>
+<div class="n-lbl" style="margin-bottom:7px">推論裝置</div>
+<div class="seg" style="display:flex;gap:0">
+<button class="seg-opt" style="font-size:12px;flex:1">Auto</button>
+<button class="seg-opt" style="font-size:12px;flex:1;color:var(--color-text);background:color-mix(in srgb, var(--color-accent) 16%, transparent)">GPU</button>
+<button class="seg-opt" style="font-size:12px;flex:1">CPU</button>
+</div>
+<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--color-neutral-600)"><span>VRAM 1.2 / 8.0 GB</span><span>Compute 8.9</span></div>
+</div>
+<div class="hr" style="margin:0"></div>
+<div>
+<div class="n-lbl" style="margin-bottom:7px">本機資料夾</div>
+<code style="display:block;font-size:11px;color:var(--color-neutral-500);line-height:1.6;word-break:break-all">…/Citrus_Pest_and_Disease_Tools/LocalLibrary</code>
+<button class="btn btn-secondary" style="font-size:12px;width:100%;margin-top:9px">重新掃描（找到 4 + 2）</button>
+</div>
+</div>
+</div>
+</div>
+<sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+<ul style="margin:2px 0 0;padding-left:18px;max-width:1080px;color:var(--color-neutral-500);font-size:12px;line-height:1.9">
+<li>設定（裝置、本機資料夾、上傳）從常駐左欄改成右側抽屜，主畫面只剩「你有哪些模型」這一條主軸。</li>
+<li>模型從卡片改成可展開的列表列，數字右對齊、等寬數字，兩個模型並排比較不用來回捲動。</li>
+<li>所有灰色小字收成頁尾一個「這個頁面怎麼用？」，展開才顯示。</li>
+</ul>
+</sc-if>
+</div>
+
+<div class="dv-opt" id="1b">
+<div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>工作台 · 表格優先（最密、最像專業工具）</div>
+<div class="dv-card" style="width:1080px">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid var(--color-neutral-800);background:color-mix(in srgb, var(--color-surface) 52%, var(--color-bg))">
+<div style="display:flex;align-items:center;gap:18px">
+<span style="font-size:13px;font-weight:500;color:var(--color-text)">柑橘病蟲害工具包</span>
+<div class="seg" style="display:flex">
+<button class="seg-opt" style="font-size:12px;color:var(--color-text);background:color-mix(in srgb, var(--color-accent) 16%, transparent)">模型</button>
+<button class="seg-opt" style="font-size:12px">消融</button>
+<button class="seg-opt" style="font-size:12px">診斷</button>
+<button class="seg-opt" style="font-size:12px">資料集</button>
+<button class="seg-opt" style="font-size:12px">評估</button>
+<button class="seg-opt" style="font-size:12px">登錄簿</button>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;font-size:12px;color:var(--color-neutral-500)">
+<span>裝置 <span style="color:var(--color-text)">CUDA:0</span></span>
+<span>插槽 <span style="color:var(--color-text)">2/3</span></span>
+<i class="ph ph-question" style="font-size:15px;color:var(--color-neutral-600)"></i>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:236px 1fr;min-height:520px">
+<aside style="border-right:1px solid var(--color-neutral-800);padding:16px 16px 20px;display:flex;flex-direction:column;gap:18px;background:color-mix(in srgb, var(--color-bg) 88%, #000)">
+<div>
+<div class="n-lbl" style="margin-bottom:8px">來源</div>
+<code style="display:block;font-size:11px;color:var(--color-neutral-500);line-height:1.6;word-break:break-all">LocalLibrary/</code>
+<div style="display:flex;gap:6px;margin-top:9px">
+<button class="btn btn-secondary" style="font-size:12px;flex:1">掃描</button>
+<button class="btn btn-ghost" style="font-size:12px;flex:1">上傳</button>
+</div>
+</div>
+<div>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span class="n-lbl">掃描結果 6</span><span style="font-size:11px;color:var(--color-accent)">全選</span></div>
+<div style="display:flex;flex-direction:column">
+<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 6%, transparent);font-size:12px;color:var(--color-text)"><input type="checkbox" checked style="accent-color:var(--color-accent)">yolov8n_citrus_e300</label>
+<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 6%, transparent);font-size:12px;color:var(--color-text)"><input type="checkbox" style="accent-color:var(--color-accent)">yolov8s_e300_nomos</label>
+<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 6%, transparent);font-size:12px;color:var(--color-neutral-600)"><input type="checkbox" disabled>ssdlite_small_run.zip</label>
+<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 6%, transparent);font-size:12px;color:var(--color-text)"><input type="checkbox" style="accent-color:var(--color-accent)">citrus_v4（資料集）</label>
+</div>
+<button class="btn btn-primary" style="font-size:12px;width:100%;margin-top:10px">載入選取（2）</button>
+</div>
+<div>
+<div class="n-lbl" style="margin-bottom:8px">推論裝置</div>
+<div style="display:flex;flex-direction:column;gap:4px;font-size:12px">
+<label style="display:flex;align-items:center;gap:8px;color:var(--color-text)"><span style="width:7px;height:7px;border-radius:50%;background:var(--color-accent)"></span>CUDA:0 RTX 4060</label>
+<label style="display:flex;align-items:center;gap:8px;color:var(--color-neutral-500)"><span style="width:7px;height:7px;border-radius:50%;border:1px solid var(--color-neutral-700)"></span>CPU (x86_64)</label>
+<label style="display:flex;align-items:center;gap:8px;color:var(--color-neutral-500)"><span style="width:7px;height:7px;border-radius:50%;border:1px solid var(--color-neutral-700)"></span>Auto</label>
+</div>
+</div>
+</aside>
+<div style="padding:18px 20px 24px;display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<h3 style="margin:0;font-size:16px;color:var(--color-text)">已載入模型</h3>
+<span style="font-size:12px;color:var(--color-neutral-600)">依 mAP@50 排序</span>
+</div>
+<table class="table" style="font-size:13px">
+<thead><tr>
+<th style="text-align:left">名稱</th><th>架構</th><th style="text-align:right">Epochs</th><th style="text-align:right">大小</th><th style="text-align:right">mAP@50</th><th style="text-align:right">mAP@50-95</th><th style="text-align:right">匯出</th><th></th>
+</tr></thead>
+<tbody>
+<sc-for list="{{ rows1b }}" as="r" hint-placeholder-count="3">
+<tr>
+<td style="text-align:left"><div style="color:var(--color-text)">{{ r.name }}</div><code style="font-size:11px;color:var(--color-neutral-600)">{{ r.sha }}</code></td>
+<td><span class="tag tag-outline" style="font-size:10px">{{ r.arch }}</span></td>
+<td style="text-align:right;font-variant-numeric:tabular-nums">{{ r.epochs }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums">{{ r.size }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--color-accent-400)">{{ r.map50 }}</td>
+<td style="text-align:right;font-variant-numeric:tabular-nums">{{ r.map }}</td>
+<td style="text-align:right">{{ r.exp }}</td>
+<td style="text-align:right;color:var(--color-neutral-600)"><i class="ph ph-dots-three"></i></td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+<div>
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px">
+<h3 style="margin:0;font-size:16px;color:var(--color-text)">格式轉換</h3>
+<span style="font-size:12px;color:var(--color-neutral-600)">僅 YOLO（.pt）可轉換</span>
+</div>
+<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--color-neutral-800);border-radius:var(--radius-md)">
+<select class="input" style="width:220px;font-size:13px"><option>YOLOv8n · e300 · mosaic on</option></select>
+<select class="input" style="width:180px;font-size:13px"><option>ONNX</option><option>TFLite（需 Docker）</option></select>
+<button class="btn btn-primary" style="font-size:13px">開始轉換</button>
+<span style="font-size:12px;color:var(--color-neutral-600);margin-left:auto">上次：best.onnx · 12.4 MB · 8 秒</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+<ul style="margin:2px 0 0;padding-left:18px;max-width:1080px;color:var(--color-neutral-500);font-size:12px;line-height:1.9">
+<li>常駐左欄只放「來源與裝置」，右邊整頁都是資料表；欄位可排序，模型多了也不會變成無限捲動的卡片牆。</li>
+<li>玻璃卡片與漸層全部拿掉，只有髮絲線與一階表面色；重點色只出現在主要指標與選取狀態。</li>
+<li>說明只在頂列一個「?」，逐控制項的灰字改成 hover 提示。</li>
+</ul>
+</sc-if>
+</div>
+
+<div class="dv-opt" id="1c">
+<div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>摘要優先 · 分區折疊（給教授看的那一版）</div>
+<div class="dv-card" style="width:1080px">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 28px 0">
+<div style="display:flex;align-items:center;gap:11px">
+<div style="width:26px;height:26px;border:1px solid var(--color-accent);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--color-accent)"><i class="ph ph-leaf" style="font-size:15px"></i></div>
+<span style="font-size:14px;font-weight:500;color:var(--color-text)">柑橘病蟲害工具包</span>
+</div>
+<button class="btn btn-ghost" style="font-size:12px"><i class="ph ph-question"></i> 說明</button>
+</div>
+<div style="display:flex;gap:24px;padding:12px 28px 0;border-bottom:1px solid var(--color-neutral-800)">
+<button class="n-tab n-tab-on">模型與裝置</button>
+<button class="n-tab">消融分析</button>
+<button class="n-tab">即時診斷</button>
+<button class="n-tab">資料集</button>
+<button class="n-tab">驗證評估</button>
+<button class="n-tab">權重登錄簿</button>
+</div>
+<div style="padding:32px 28px 36px;min-height:520px">
+<div style="display:flex;align-items:flex-start;gap:56px;margin-bottom:8px">
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">已載入模型</div><div style="font-size:30px;color:var(--color-text);font-variant-numeric:tabular-nums;letter-spacing:-.02em">2<span style="font-size:15px;color:var(--color-neutral-600)"> / 3</span></div></div>
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">最佳 mAP@50</div><div style="font-size:30px;color:var(--color-accent-400);font-variant-numeric:tabular-nums;letter-spacing:-.02em">0.867</div></div>
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">推論裝置</div><div style="font-size:20px;color:var(--color-text);margin-top:9px">CUDA:0 RTX 4060</div></div>
+<div><span class="n-mark"></span><div class="n-lbl" style="margin-top:9px">登錄簿</div><div style="font-size:20px;color:var(--color-text);margin-top:9px">14 顆權重 · 37 次實測</div></div>
+</div>
+<div class="hr" style="margin:26px 0 20px"></div>
+
+<div style="display:flex;flex-direction:column;gap:0">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent)">
+<div style="display:flex;align-items:center;gap:10px"><i class="ph ph-caret-right" style="color:var(--color-neutral-600)"></i><span style="font-size:14px;color:var(--color-text)">載入模型權重</span><span style="font-size:12px;color:var(--color-neutral-600)">上傳 · 本機資料夾掃描</span></div>
+<span style="font-size:12px;color:var(--color-neutral-600)">還有 1 個插槽</span>
+</div>
+
+<div style="padding:18px 0 8px;border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent)">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+<div style="display:flex;align-items:center;gap:10px"><i class="ph ph-caret-down" style="color:var(--color-accent)"></i><span style="font-size:14px;color:var(--color-text)">已載入的模型</span></div>
+<button class="btn btn-ghost" style="font-size:12px">並排比較</button>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+<sc-for list="{{ cards1c }}" as="c" hint-placeholder-count="2">
+<div class="card" style="padding:18px 18px 16px">
+<div class="card-kicker" style="font-size:11px">{{ c.arch }}</div>
+<div class="card-title" style="font-size:16px;margin:4px 0 12px">{{ c.name }}</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
+<div><div class="n-lbl">mAP@50</div><div style="font-size:19px;color:var(--color-accent-400);font-variant-numeric:tabular-nums">{{ c.map50 }}</div></div>
+<div><div class="n-lbl">mAP@50-95</div><div style="font-size:19px;color:var(--color-text);font-variant-numeric:tabular-nums">{{ c.map }}</div></div>
+<div><div class="n-lbl">Epochs</div><div class="n-num" style="margin-top:3px">{{ c.epochs }}</div></div>
+<div><div class="n-lbl">權重大小</div><div class="n-num" style="margin-top:3px">{{ c.size }}</div></div>
+</div>
+<div class="hr" style="margin:14px 0 12px"></div>
+<div style="display:flex;align-items:center;gap:8px">
+<button class="btn btn-secondary" style="font-size:12px">匯出</button>
+<button class="btn btn-ghost" style="font-size:12px">超參數</button>
+<span style="font-size:11px;color:var(--color-neutral-600);margin-left:auto">{{ c.sha }}</span>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent)">
+<div style="display:flex;align-items:center;gap:10px"><i class="ph ph-caret-right" style="color:var(--color-neutral-600)"></i><span style="font-size:14px;color:var(--color-text)">推論裝置</span></div>
+<span style="font-size:12px;color:var(--color-neutral-600)">CUDA:0 · VRAM 1.2 / 8.0 GB</span>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent)">
+<div style="display:flex;align-items:center;gap:10px"><i class="ph ph-caret-right" style="color:var(--color-neutral-600)"></i><span style="font-size:14px;color:var(--color-text)">本機資料夾</span></div>
+<span style="font-size:12px;color:var(--color-neutral-600)">4 個權重 · 2 個資料集</span>
+</div>
+</div>
+</div>
+</div>
+<sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+<ul style="margin:2px 0 0;padding-left:18px;max-width:1080px;color:var(--color-neutral-500);font-size:12px;line-height:1.9">
+<li>進頁面先看到四個結論數字（插槽、最佳指標、裝置、登錄簿），適合 demo 時一眼交代狀態。</li>
+<li>其餘功能收成四個折疊區，預設只展開「已載入的模型」；點開才長出設定。</li>
+<li>卡片保留但改成 Nocturne 的 <code style="color:var(--color-accent-400)">.card</code>：無左側色條、無漸層、無外光暈。</li>
+</ul>
+</sc-if>
+</div>
+
+</div>
+
+<p class="dv-next">接下來可以說：「用 <a class="dv-oid" href="#1b">1b</a> 的架構，但數字排版照 <a class="dv-oid" href="#1c">1c</a>」 · 「把 <a class="dv-oid" href="#1a">1a</a> 套到其他五個分頁」 · 「三個都太保守，再給我更大膽的」</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;提案版面&quot;}}">
+class Component extends DCLogic {
+  componentDidMount() { this.icons(); }
+  componentDidUpdate() { this.icons(); }
+  icons() {
+    // Phosphor web font renders via CSS classes; nothing to init. Kept for parity.
+  }
+  state = { tab: '摘要', drawer: true };
+  renderVals() {
+    const tab = this.state.tab;
+    const labels = ['摘要', '模型與裝置', '消融分析', '即時診斷', '資料集', '驗證評估', '權重登錄簿'];
+    return {
+      showNotes: this.props.showNotes ?? true,
+      onModels: tab === '模型與裝置',
+      onSummary: tab === '摘要',
+      onMetrics: tab === '消融分析',
+      onDemo: tab === '即時診斷',
+      onDataset: tab === '資料集',
+      onEvaluate: tab === '驗證評估',
+      onRegistry: tab === '權重登錄簿',
+      goModels: () => this.setState({ tab: '模型與裝置' }),
+      toggleDrawer: () => this.setState(s => ({ drawer: !s.drawer })),
+      metricOpts: [
+        { name: '訓練 Box 損失' }, { name: '訓練 Class 損失' }, { name: '訓練 DFL 損失' },
+        { name: '驗證 Box 損失' }, { name: '精確率 Precision' }, { name: '召回率 Recall' },
+        { name: 'mAP@50' }, { name: 'mAP@50:95' }
+      ],
+      chartSections: [
+        { name: '訓練 Box 損失', desc: '邊界框擬合精準度收斂值' },
+        { name: '精確率 Precision', desc: '預測為正樣本中真實為正的比例' },
+        { name: 'mAP@50', desc: 'IoU=0.5 條件下的平均精確度' }
+      ],
+      demoCards: [
+        { filename: 'IMG_2481.jpg', counts: 3, tagA: '柑橘潛葉蛾 2', tagB: '葉部黃化 1' },
+        { filename: 'IMG_2483.jpg', counts: 5, tagA: '介殼蟲 3', tagB: '煤煙病 2' },
+        { filename: 'IMG_2490.jpg', counts: 1, tagA: '木蝨 1', tagB: '無其他病徵' },
+        { filename: 'IMG_2502.jpg', counts: 4, tagA: '柑橘紅蜘蛛 2', tagB: '潰瘍病斑 2' }
+      ],
+      dsCards: [
+        { value: '4,463', label: '影像總數', sub: '3 個資料分割' },
+        { value: '11,208', label: '標註總數', sub: '平均每張 2.51 個' },
+        { value: '8', label: '類別數', sub: 'data.yaml nc = 8' },
+        { value: '214', label: '空標註影像', sub: '佔 4.8%' }
+      ],
+      classRows: [
+        { name: '柑橘潛葉蛾 leafminer', ann: '3,104', img: '1,882', pct: '27.7%', area: '0.0121' },
+        { name: '介殼蟲 scale', ann: '2,410', img: '1,455', pct: '21.5%', area: '0.0064' },
+        { name: '柑橘紅蜘蛛 mite', ann: '1,986', img: '1,201', pct: '17.7%', area: '0.0033' },
+        { name: '煤煙病 sooty mold', ann: '1,502', img: '968', pct: '13.4%', area: '0.0288' },
+        { name: '潰瘍病 canker', ann: '1,088', img: '742', pct: '9.7%', area: '0.0176' }
+      ],
+      evalRows: [
+        { name: '柑橘潛葉蛾 leafminer', ap50: '0.912', ap: '0.641', recall: '0.874', area: '0.0121' },
+        { name: '介殼蟲 scale', ap50: '0.884', ap: '0.602', recall: '0.841', area: '0.0064' },
+        { name: '柑橘紅蜘蛛 mite', ap50: '0.771', ap: '0.463', recall: '0.702', area: '0.0033' },
+        { name: '煤煙病 sooty mold', ap50: '0.905', ap: '0.618', recall: '0.858', area: '0.0288' },
+        { name: '潰瘍病 canker', ap50: '0.862', ap: '0.577', recall: '0.803', area: '0.0176' }
+      ],
+      bestRows: [
+        { metric: 'mAP@50', value: '0.8672', who: 'YOLOv8n · e300 · mosaic on' },
+        { metric: 'mAP@50-95', value: '0.5841', who: 'YOLOv8n · e300 · mosaic on' },
+        { metric: 'Micro-Accuracy', value: '0.7412', who: 'YOLOv8s · e300' }
+      ],
+      weightRows: [
+        { name: 'YOLOv8n · e300 · mosaic on', arch: 'yolo', source: 'LocalLibrary', sha: '6f2a1c9d', epochs: '300', size: '6.2 MB', map50: '0.8672', micro: '0.7284', evals: '6', last: '08-30 21:14' },
+        { name: 'YOLOv8s · e300 · no mosaic', arch: 'yolo', source: 'LocalLibrary', sha: 'a04be731', epochs: '300', size: '21.5 MB', map50: '0.8611', micro: '0.7412', evals: '5', last: '08-30 19:48' },
+        { name: 'YOLOv8n · e150', arch: 'yolo', source: '上傳 ZIP', sha: 'c19f80b2', epochs: '150', size: '6.2 MB', map50: '0.8104', micro: '0.6903', evals: '4', last: '08-29 15:20' },
+        { name: 'ssdlite_small · e120', arch: 'ssdlite_small', source: 'LocalLibrary', sha: 'd7e3aa15', epochs: '120', size: '14.1 MB', map50: '0.6014', micro: '0.5122', evals: '3', last: '08-28 11:03' },
+        { name: 'YOLOv8n · e300 · albument', arch: 'yolo', source: '上傳權重', sha: 'ff0912cd', epochs: '300', size: '6.2 MB', map50: '0.8549', micro: '0.7190', evals: '2', last: '08-27 22:41' }
+      ],
+      drawerStyle: this.state.drawer && tab !== '摘要'
+        ? 'width:272px;margin-left:20px;position:sticky;top:22px;background:var(--color-surface);border:1px solid var(--color-neutral-700);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);padding:14px 16px 16px;display:flex;flex-direction:column;gap:16px'
+        : 'display:none',
+      tabs: labels.map(l => ({
+        label: l,
+        cls: l === tab ? 'n-tab n-tab-on' : 'n-tab',
+        go: () => this.setState({ tab: l })
+      })),
+      rows2a: [
+        { name: 'YOLOv8n · e300 · mosaic on', sha: '6f2a1c9d', arch: 'yolo', src: '本機資料夾', epochs: '300', size: '6.2 MB', map50: '0.8672', map: '0.5841', exp: 'ONNX' },
+        { name: 'YOLOv8s · e300 · no mosaic', sha: 'a04be731', arch: 'yolo', src: '本機資料夾', epochs: '300', size: '21.5 MB', map50: '0.8611', map: '0.5773', exp: '—' },
+        { name: 'SSDLite-Small · e120', sha: 'd7e3aa15', arch: 'ssdlite', src: '上傳', epochs: '120', size: '14.1 MB', map50: '0.6014', map: '0.3120', exp: '不支援' }
+      ],
+      rows1b: [
+        { name: 'YOLOv8n · e300 · mosaic on', sha: '6f2a1c9d', arch: 'yolo', epochs: '300', size: '6.2 MB', map50: '0.8672', map: '0.5841', exp: 'ONNX' },
+        { name: 'YOLOv8s · e300 · no mosaic', sha: 'a04be731', arch: 'yolo', epochs: '300', size: '21.5 MB', map50: '0.8611', map: '0.5773', exp: '—' },
+        { name: 'SSDLite-Small · e120', sha: 'd7e3aa15', arch: 'ssdlite', epochs: '120', size: '14.1 MB', map50: '0.6014', map: '0.3120', exp: '不支援' }
+      ],
+      cards1c: [
+        { arch: 'YOLO · 本機資料夾', name: 'YOLOv8n · e300 · mosaic on', map50: '0.867', map: '0.584', epochs: '300', size: '6.2 MB', sha: '6f2a1c9d' },
+        { arch: 'SSDLite · 上傳', name: 'SSDLite-Small · e120', map50: '0.601', map: '0.312', epochs: '120', size: '14.1 MB', sha: 'd7e3aa15' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
