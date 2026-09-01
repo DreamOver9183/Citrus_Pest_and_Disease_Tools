@@ -1,4 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+/* 字型改為 Nocturne 指定的 Inter，加 Noto Sans TC 補中文字身，mono 維持
+   JetBrains Mono。原本匯入的 Outfit / Space Grotesk 其實從來沒有生效過——
+   App.jsx 在最外層掛了 font-sans，而 Tailwind 預設的 font-sans 是
+   ui-sans-serif/system-ui，會蓋掉這裡 body 的設定並沿 DOM 繼承下去。
+   現在 fontFamily.sans / .mono 由 tailwind.config.js 指向這些字型，
+   font-sans 與 font-mono 才真的指向設計系統的字型。
+   （這仍是一個外部網路請求。要真正離線需要改用 @fontsource 自架字型，
+     那會新增 npm 依賴，尚未決定——見 docs/ui_redesign/adoption-notes.md。） */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+/* Nocturne 的 design token（只有變數，沒有元件層）。必須在 @tailwind 之前，
+   CSS 的 @import 一律要排在其他規則之前。 */
+@import './styles/nocturne-tokens.css';
 
 @tailwind base;
 @tailwind components;
@@ -6,9 +18,11 @@
 
 body {
   margin: 0;
-  font-family: 'Outfit', 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: theme('fontFamily.sans');
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 底色刻意暫時維持原值。改成 var(--color-bg) 是換皮的一部分，
+     屬於逐頁遷移，不在基礎建設層做。 */
   background-color: #030712;
 }
 

@@ -35,6 +35,15 @@ npm run build
 cd ShowResultsWeb/backend && uvicorn main:app --reload --host 127.0.0.1 --port 8000
 cd ShowResultsWeb/frontend && npm run dev     # 代理 /api、/static、/samples 到 8000
 
+# ⚠ Docker 容器沒關的話，上面那組會靜默失效。容器把 8000 綁在 0.0.0.0 與 [::]，
+# 本機 uvicorn 只綁 127.0.0.1；而 vite.config.js 的 proxy 寫的是 `localhost:8000`，
+# Windows 上 localhost 優先解析成 ::1 —— 於是前端連到的是**容器**而不是你剛改的後端，
+# 兩者都會正常回應，只有資料對不上（容器走 PostgreSQL、本機走 SQLite）。
+# 改後端卻發現行為沒變時先查這個：
+netstat -ano | grep :8000          # 看有幾個 LISTENING
+curl -s 127.0.0.1:8000/api/registry/stats   # 本機 uvicorn，應為 "backend":"sqlite"
+curl -s "http://[::1]:8000/api/registry/stats"  # 容器，應為 "backend":"postgresql"
+
 # Docker（唯一能跑 TFLite 匯出的環境；Windows 開發模式下 TFLite 會顯示不可用）
 # 會一併起 postgres:16-alpine 給權重登錄簿；單指令仍然成立
 docker compose up --build
