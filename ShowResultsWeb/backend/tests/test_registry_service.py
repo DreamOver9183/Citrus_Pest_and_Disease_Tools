@@ -290,3 +290,31 @@ def test_writes_are_silent_no_ops_when_database_is_down(weight_file):
         assert registry_service.stats()["available"] is False
     finally:
         db_engine.dispose()
+
+
+# --- 引擎名稱：回報實際連線，不是設定值 --------------------------------------
+
+
+def test_backend_name_reports_the_live_engine_not_the_env(registry_db, monkeypatch):
+    """`backend_name()` 必須回報 engine 實際連上的資料庫，而不是 `DATABASE_URL`。
+
+    這兩者會不一致：`reset_for_tests()` 換掉連線但不動環境變數。曾經因為它讀設定值，
+    CI 的 PostgreSQL 那一輪整個紅掉（engine 綁在 tmp SQLite 上，stats 卻回報
+    postgresql），**而本機跑預設的 SQLite 完全看不出來**——所以這條測試刻意在
+    預設軌就能抓到，不依賴 CI 的第二輪。
+
+    前端「資料庫引擎」欄位只讀這個值，報錯的引擎比報「不知道」更糟。
+    """
+    monkeypatch.setattr(db_engine, "DATABASE_URL", "postgresql+psycopg://u:p@h/db")
+    assert db_engine.backend_name() == "sqlite"
+    assert registry_service.stats()["backend"] == "sqlite"
+
+
+def test_backend_name_falls_back_to_config_when_there_is_no_engine(monkeypatch):
+    """沒有 engine 時退回設定值——此時「我試著連的是什麼」正是呼叫端要的資訊。
+
+    `routers/registry.py` 的 503 details 依賴這個行為。
+    """
+    db_engine.dispose()
+    monkeypatch.setattr(db_engine, "DATABASE_URL", "postgresql+psycopg://u:p@h/db")
+    assert db_engine.backend_name() == "postgresql"
