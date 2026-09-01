@@ -1,0 +1,175 @@
+/* Nocturne 擴充 token — 柑橘病蟲害工具包
+ *
+ * Nocturne 本身是單一 accent 的低彩度系統，沒有語意色也沒有類別色。
+ * 但本專案的顏色是「帶語意的資料」不是裝飾：classMap.js 的病蟲害類別、
+ * chartTheme.js 的 CHART_SERIES / SPLIT_COLORS、evalTheme.js 的 job 狀態，
+ * 少了它們就沒辦法表達。這個檔案在 Nocturne 的既有尺度上補齊那兩組。
+ *
+ * 生成方式與 Nocturne 的 ramp 一致：OKLCH、共用同一條感知亮度尺度
+ * （L 值反推自 --color-neutral-*），因此同一階的任何角色視覺重量相同。
+ *
+ * 用法：在 styles.css 之後載入。
+ *   <link rel="stylesheet" href="_ds/nocturne-.../styles.css">
+ *   <link rel="stylesheet" href="nocturne-extension.css">
+ *
+ * 每個 token 都有兩種形式：
+ *   --color-x: #rrggbb;        直接當顏色用（.dc.html 設計文件、純 CSS）
+ *   --color-x-rgb: R G B;      給 Tailwind 的 theme.extend 用：
+ *                              colors: { x: 'rgb(var(--color-x-rgb) / <alpha-value>)' }
+ *
+ * 兩種都要，是因為前端有 376 處、125 種不同的透明度修飾詞寫法
+ * （bg-orange-500/10、border-red-500/30 …）。Tailwind 的 /10 修飾詞沒辦法作用在
+ * 存著完整色值的變數上，必須是空格分隔的通道值配 <alpha-value> 佔位符；
+ * 而設計文件那邊又需要能直接 var() 進 style 屬性的完整色值。
+ *
+ * 注意：CLAUDE.md 硬規則 3 仍然成立——依變數選色一律用完整靜態
+ * Tailwind 字串的查表物件，不能拼接（`bg-cat-${n}-500` 會被 JIT 裁掉）。
+ */
+
+:root {
+
+  /* === 類別色（categorical）===
+   * 12 個色相，30° 等距，相位定在 4.6°——讓 accent 的色相（289.6°）落在
+   * 相鄰兩色的正中間，各差 15°。索引順序用 stride 5（與 12 互質），
+   * 因此 cat-N 與 cat-N+1 的色相相差 150°，相鄰序列在圖表上最好分辨。
+   *
+   * 彩度取全色環的安全值（step 400: C=0.112，step 500: C=0.116），
+   * 所以 12 個顏色彩度相同，沒有哪一個特別跳。
+   * 在 --color-bg 上的對比全部落在 5.8–6.5:1，遠高於非文字 UI 需要的 3:1。
+   *
+   * **這是 Nocturne「Keep chroma low outside the accent」的明確例外**——
+   * 與 deck 分隔頁、landing stat band 並列的第三個例外。理由：8–12 個類別
+   * 要能一眼區分就必須有彩度，這是資料的需求，不是裝飾的偏好。
+   * 兩者靠「使用形式」分離而不是色相：accent 只走線條、外框與發光，
+   * 類別色只走實心填色，不會互相誤認。
+   */
+  --color-cat-1-400: #f398ae;
+  --color-cat-1-400-rgb: 243 152 174;
+  --color-cat-2-400: #7acc97;
+  --color-cat-2-400-rgb: 122 204 151;
+  --color-cat-3-400: #c7a5f1;
+  --color-cat-3-400-rgb: 199 165 241;
+  --color-cat-4-400: #ceb65e;
+  --color-cat-4-400-rgb: 206 182 94;
+  --color-cat-5-400: #77bffa;
+  --color-cat-5-400-rgb: 119 191 250;
+  --color-cat-6-400: #f59d87;
+  --color-cat-6-400-rgb: 245 157 135;
+  --color-cat-7-400: #52cec0;
+  --color-cat-7-400-rgb: 82 206 192;
+  --color-cat-8-400: #e39cd4;
+  --color-cat-8-400-rgb: 227 156 212;
+  --color-cat-9-400: #a7c472;
+  --color-cat-9-400-rgb: 167 196 114;
+  --color-cat-10-400: #a2b1fe;
+  --color-cat-10-400-rgb: 162 177 254;
+  --color-cat-11-400: #e9a868;
+  --color-cat-11-400-rgb: 233 168 104;
+  --color-cat-12-400: #51c9e3;
+  --color-cat-12-400-rgb: 81 201 227;
+
+  --color-cat-1-500: #d3798f;
+  --color-cat-1-500-rgb: 211 121 143;
+  --color-cat-2-500: #57ad78;
+  --color-cat-2-500-rgb: 87 173 120;
+  --color-cat-3-500: #a885d2;
+  --color-cat-3-500-rgb: 168 133 210;
+  --color-cat-4-500: #af9739;
+  --color-cat-4-500-rgb: 175 151 57;
+  --color-cat-5-500: #549fda;
+  --color-cat-5-500-rgb: 84 159 218;
+  --color-cat-6-500: #d57d67;
+  --color-cat-6-500-rgb: 213 125 103;
+  --color-cat-7-500: #1cafa1;
+  --color-cat-7-500-rgb: 28 175 161;
+  --color-cat-8-500: #c47cb5;
+  --color-cat-8-500-rgb: 196 124 181;
+  --color-cat-9-500: #89a451;
+  --color-cat-9-500-rgb: 137 164 81;
+  --color-cat-10-500: #8392df;
+  --color-cat-10-500-rgb: 131 146 223;
+  --color-cat-11-500: #c98845;
+  --color-cat-11-500-rgb: 201 136 69;
+  --color-cat-12-500: #1aaac4;
+  --color-cat-12-500-rgb: 26 170 196;
+
+  /* === 語意色（semantic）===
+   * 只有三個角色：success / warning / danger。
+   * info／「進行中」刻意不另設，直接用 --color-accent——正在發生的那件事
+   * 本來就該是畫面上唯一的 accent。
+   *
+   * 每個角色給四階，對應 Nocturne readme 說的用法：
+   *   300 = 深色底上的文字   500 = 角色基準色
+   *   700 = 邊框             900 = 底色填充
+   * 語意色只用在小面積（chip、進度條、圖示），不做大面積填色——
+   * 這與 Nocturne「accent 走線條與記號而非漫流」是同一個原則，不衝突。
+   */
+  --color-success-300: #9ceb9e;
+  --color-success-300-rgb: 156 235 158;
+  --color-success-500: #60ad64;
+  --color-success-500-rgb: 96 173 100;
+  --color-success-700: #207029;
+  --color-success-700-rgb: 32 112 41;
+  --color-success-900: #003608;
+  --color-success-900-rgb: 0 54 8;
+
+  --color-warning-300: #ffca7e;
+  --color-warning-300-rgb: 255 202 126;
+  --color-warning-500: #c78b28;
+  --color-warning-500-rgb: 199 139 40;
+  --color-warning-700: #7e5401;
+  --color-warning-700-rgb: 126 84 1;
+  --color-warning-900: #3d2600;
+  --color-warning-900-rgb: 61 38 0;
+
+  --color-danger-300: #ffc3ba;
+  --color-danger-300-rgb: 255 195 186;
+  --color-danger-500: #dd7769;
+  --color-danger-500-rgb: 221 119 105;
+  --color-danger-700: #993a30;
+  --color-danger-700-rgb: 153 58 48;
+  --color-danger-900: #580001;
+  --color-danger-900-rgb: 88 0 1;
+
+  /* === Nocturne 自身 token 的通道版本 ===
+   * styles.css 的 token 存的是 hex，Tailwind 的 /10 修飾詞吃不到。
+   * 這裡不改動 vendored 的 styles.css，只在後面補一份通道值，
+   * 讓 theme.extend 也能對 Nocturne 的原生角色用透明度修飾詞。
+   * 值與 styles.css 逐一對應，改動 styles.css 時要一併重生。
+   */
+  --color-bg-rgb: 22 24 38;
+  --color-surface-rgb: 35 37 50;
+  --color-text-rgb: 233 233 237;
+  --color-accent-rgb: 145 132 217;
+  --color-accent-2-rgb: 167 161 219;
+  --color-neutral-100-rgb: 243 245 254;
+  --color-neutral-200-rgb: 228 231 245;
+  --color-neutral-300-rgb: 207 211 229;
+  --color-neutral-400-rgb: 178 182 202;
+  --color-neutral-500-rgb: 147 151 171;
+  --color-neutral-600-rgb: 117 121 140;
+  --color-neutral-700-rgb: 89 93 108;
+  --color-neutral-800-rgb: 63 66 77;
+  --color-neutral-900-rgb: 41 43 49;
+  --color-accent-100-rgb: 245 244 255;
+  --color-accent-200-rgb: 231 229 254;
+  --color-accent-300-rgb: 210 206 253;
+  --color-accent-400-rgb: 181 171 252;
+  --color-accent-500-rgb: 150 138 224;
+  --color-accent-600-rgb: 121 108 191;
+  --color-accent-700-rgb: 93 82 148;
+  --color-accent-800-rgb: 66 58 106;
+  --color-accent-900-rgb: 43 39 65;
+  --color-accent-2-100-rgb: 245 244 255;
+  --color-accent-2-200-rgb: 231 229 254;
+  --color-accent-2-300-rgb: 210 206 253;
+  --color-accent-2-400-rgb: 181 175 232;
+  --color-accent-2-500-rgb: 150 144 201;
+  --color-accent-2-600-rgb: 121 114 169;
+  --color-accent-2-700-rgb: 92 87 131;
+  --color-accent-2-800-rgb: 66 62 93;
+  --color-accent-2-900-rgb: 43 41 58;
+  --color-section-rgb: 38 42 96;
+  --color-section-glow-rgb: 53 59 128;
+  --color-section-ghost-rgb: 76 83 151;
+}
