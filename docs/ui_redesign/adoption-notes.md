@@ -3,8 +3,8 @@
 這份文件記錄「要把 Nocturne 套到本專案」時必須先定下來的決定，以及已經定案的部分。
 設計方向本身見 `redesign-proposal.dc.html`，現況樣板見 `current-state.dc.html`。
 
-**目前狀態：B1–B4 全部定案，基礎建設層已實作（見最後一節）。**
-元件外觀尚未遷移。
+**目前狀態：B1–B4 全部定案；基礎建設層與「模型與裝置」分頁已完成遷移。**
+其餘五個分頁仍是舊樣式。
 
 ---
 
@@ -263,6 +263,58 @@ export default {
 現在仍然是一個 Google Fonts 請求（只是換了字族）。對「本地離線」的定位，正解是用
 `@fontsource` 系列套件自架，但那會新增 npm 依賴——CLAUDE.md 對依賴變動有明確的謹慎
 要求，所以留給人決定，沒有擅自加。
+
+---
+
+## 已完成：「模型與裝置」分頁（第一個遷移的分頁）
+
+依 1a 的方向：**單欄主軸 ＋ 設定抽屜**。
+
+| 檔案 | |
+| --- | --- |
+| `system-specs/SettingsDrawer.jsx` | **新增。** 右側滑出抽屜，Esc 與點背景關閉、開啟時移入焦點、`role="dialog"`。 |
+| `system-specs/ModelRow.jsx` | **新增。** 可展開的模型列：收合看名稱／架構／來源／輪數／大小／兩個 mAP，展開看來源檔、優化器、模型設定、改名、匯出、工作區路徑與移除。 |
+| `SystemSpecs.jsx` | 重組為單欄主軸；上傳、本機資料夾、推論裝置移進抽屜。 |
+| `system-specs/LocalLibraryPanel.jsx` | 改用 Nocturne token，去掉自帶面板外框（外框由抽屜負責）。 |
+| `system-specs/ExportPanel.jsx`、`exportFormats.js` | 改用 Nocturne token；`STATE_STYLES` 照 B1 對應到 accent／success／danger。 |
+
+### 抽屜的開關狀態放哪裡
+
+**元件本地 state，不放 `context/hooks/`。** CLAUDE.md 硬規則 2 的判準是「切走分頁再切
+回來還需要在嗎」——抽屜是純呈現，真正需要存活的東西（掃描結果、勾選項目、進行中的
+請求）本來就在 `useLocalLibrary` 這個耐久 hook 裡。
+
+但這帶來一個真實風險：使用者按下掃描、關掉抽屜，就再也看不到結果了。因此「設定」按鈕
+在 `isScanning || isRegistering || selectedIds.length > 0` 時會顯示一個小圓點。
+
+### 遷移途中發現的四個既有 bug
+
+都不是這次改動造成的，但都在動到那段程式碼時浮出來，一併修掉：
+
+1. **模型卡的 mAP 一直顯示 N/A。** 舊程式讀 `metrics_summary.mAP` 與 `.mAP_50`，
+   但實際鍵是 `mAP50` 與 `mAP50-95`（後端把 `results.csv` 的表頭原樣帶過來，只去掉
+   `metrics/` 前綴與 `(B)` 後綴）。兩個鍵從來都不存在。改成比照
+   `registry_service.py` 的別名表做不分大小寫的比對。
+2. **權重登錄簿的來源徽章顯示原始字串 `local_library_run`。**
+   `registryFormat.js` 的 `SOURCE_LABELS`／`SOURCE_STYLES` 只有 `local_library` 這個鍵，
+   但 `library_scanner.py` 送的是 `local_library_run`，於是退回 unknown 樣式並把鍵名
+   直接印在畫面上。這正是 CLAUDE.md 硬規則 4 在講的失敗模式。兩個鍵都補上。
+3. **推論裝置有兩個項目同時打勾。** 舊邏輯把「auto 時第一個實體裝置也算 selected」
+   寫進同一個判斷式。舊版面把 auto 拆成獨立按鈕所以不明顯，收進同一個清單後就變成
+   兩個勾。改成 auto 與實體裝置互斥，實際落在哪個裝置改用「自動選用」提示表示。
+4. **展開列的按鈕沒有可及性名稱**（內容是巢狀 div／dl，算不出有意義的字串）。
+   補 `aria-label`。
+
+### 驗證
+
+`npm run build` 與 `pytest`（352 passed）之外，實際開瀏覽器完整走過一遍：
+開抽屜 → 掃描（6 權重 / 2 資料集）→ 取消全選 → 勾選 → 載入 → Esc 關閉 → 展開列 →
+確認 mAP、來源徽章、匯出面板 → 移除 → 分頁切換。console 零錯誤。
+
+### 已知的過渡狀態
+
+全域 shell（header、分頁列、footer、背景光暈）仍是舊的橘色玻璃擬態，與 Nocturne 的
+內容區有明顯接縫。這是逐頁遷移的預期代價，會在其餘分頁與 shell 遷移後消失。
 
 ---
 

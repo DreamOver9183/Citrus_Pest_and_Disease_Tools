@@ -6,12 +6,16 @@ import {
 import { useExperiment } from '../../context/ExperimentContext';
 
 // 來源形態的視覺標示。Tailwind 需要完整靜態 class 字串，不能用拼接。
+//
+// 圖示一律走中性色：Nocturne 的原則是 accent 之外保持低彩度，而「這是資料夾還是
+// ZIP」由圖示形狀就分得出來，不需要再用色相講一次。彩度留給真正帶語意的資料
+// （偵測類別、圖表序列），見 docs/ui_redesign/adoption-notes.md 的 B1。
 const SOURCE_META = {
-  run_dir: { label: '資料夾', Icon: Folder, tone: 'text-teal-400' },
-  weight_file: { label: '權重檔', Icon: FileBox, tone: 'text-sky-400' },
-  zip_run: { label: 'ZIP', Icon: FileArchive, tone: 'text-amber-400' },
-  dataset_dir: { label: '資料夾', Icon: Folder, tone: 'text-teal-400' },
-  dataset_zip: { label: 'ZIP', Icon: FileArchive, tone: 'text-amber-400' },
+  run_dir: { label: '資料夾', Icon: Folder },
+  weight_file: { label: '權重檔', Icon: FileBox },
+  zip_run: { label: 'ZIP', Icon: FileArchive },
+  dataset_dir: { label: '資料夾', Icon: Folder },
+  dataset_zip: { label: 'ZIP', Icon: FileArchive },
 };
 
 const CandidateRow = ({ candidate, checked, onToggle }) => {
@@ -21,12 +25,12 @@ const CandidateRow = ({ candidate, checked, onToggle }) => {
 
   return (
     <label
-      className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition-all ${
+      className={`flex items-start gap-2.5 px-3 py-2 rounded-ds border transition-colors ${
         disabled
-          ? 'bg-white/[0.02] border-white/5 opacity-50 cursor-default'
+          ? 'border-ds-neutral-800 opacity-45 cursor-default'
           : checked
-            ? 'bg-teal-500/10 border-teal-500/40 cursor-pointer'
-            : 'bg-slate-950/40 border-white/5 hover:border-white/15 cursor-pointer'
+            ? 'border-accent bg-accent/10 cursor-pointer'
+            : 'border-ds-neutral-800 hover:border-ds-neutral-700 cursor-pointer'
       }`}
     >
       <input
@@ -34,24 +38,24 @@ const CandidateRow = ({ candidate, checked, onToggle }) => {
         checked={checked}
         disabled={disabled}
         onChange={() => onToggle(candidate.candidate_id)}
-        className="mt-0.5 w-3.5 h-3.5 flex-shrink-0 accent-teal-500 cursor-pointer disabled:cursor-default"
+        className="mt-0.5 w-3.5 h-3.5 flex-shrink-0 [accent-color:var(--color-accent)] cursor-pointer disabled:cursor-default"
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <Icon className={`w-3 h-3 flex-shrink-0 ${meta.tone}`} />
-          <span className="text-[11px] font-bold text-white truncate" title={candidate.name}>
+          <Icon className="w-3 h-3 flex-shrink-0 text-ds-neutral-500" />
+          <span className="text-sm text-ink truncate" title={candidate.name}>
             {candidate.name}
           </span>
           {disabled && (
-            <span className="text-[8px] px-1.5 py-0.5 bg-white/10 text-gray-400 rounded font-bold flex-shrink-0">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-ds-sm border border-ds-neutral-700 text-ds-neutral-500 flex-shrink-0">
               已載入
             </span>
           )}
         </div>
-        <p className="text-[9px] text-gray-500 font-mono truncate mt-0.5" title={candidate.rel_path}>
+        <p className="text-xs text-ds-neutral-600 truncate mt-0.5" title={candidate.rel_path}>
           {candidate.rel_path}
         </p>
-        <p className="text-[9px] text-gray-400 mt-0.5">
+        <p className="text-xs text-ds-neutral-500 mt-0.5 tabular-nums">
           {candidate.detail}
           {candidate.size_mb ? ` · ${candidate.size_mb} MB` : ''}
         </p>
@@ -69,15 +73,15 @@ const CandidateGroup = ({ title, Icon, items, selectedIds, onToggle, onToggleAll
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+        <span className="text-xs text-ds-neutral-500 flex items-center gap-1.5">
           <Icon className="w-3 h-3" />
           {title}
-          <span className="text-gray-600 font-mono">({items.length})</span>
+          <span className="text-ds-neutral-600 tabular-nums">({items.length})</span>
         </span>
         {selectable.length > 0 && (
           <button
             onClick={() => onToggleAll(!allSelected)}
-            className="text-[9px] text-teal-400 hover:text-teal-300 font-bold cursor-pointer font-sans"
+            className="text-xs text-accent hover:text-accent-300 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 rounded-ds-sm"
           >
             {allSelected ? '取消全選' : '全選'}
           </button>
@@ -104,6 +108,9 @@ const CandidateGroup = ({ title, Icon, items, selectedIds, onToggle, onToggleAll
 // 資料夾轉成後端可用的絕對路徑，固定目錄讓路徑完全不需要經過瀏覽器。
 //
 // 掃描只列出找到什麼、不載入任何東西；使用者勾選後按「載入選取項目」才會真正註冊。
+//
+// 這個元件現在住在設定抽屜裡，因此不自帶面板外框——外框由抽屜負責，
+// 它只提供一個 section。
 const LocalLibraryPanel = () => {
   const {
     libraryPath,
@@ -139,43 +146,21 @@ const LocalLibraryPanel = () => {
   const busy = isScanning || isRegistering;
 
   return (
-    <div className="glass-panel p-6 rounded-2xl border border-white/[0.06] shadow-xl space-y-5 relative overflow-hidden">
-      <div className="absolute top-[-25%] right-[-15%] w-[120px] h-[120px] rounded-full bg-teal-500/5 blur-[40px] pointer-events-none"></div>
+    <section>
+      <h3 className="text-sm font-medium text-ink mb-1">本機資料夾</h3>
+      <p className="text-xs text-ds-neutral-500 mb-3 leading-relaxed">
+        把訓練成果（含 weights/best.pt 與 args.yaml）、權重檔或資料集放進下方路徑，
+        資料夾或 ZIP 皆可。掃描只列出找到什麼，勾選後才會載入；結果保留至後端關閉為止。
+      </p>
 
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-bold text-white tracking-widest uppercase flex items-center gap-2">
-          <FolderSearch className="w-4 h-4 text-teal-400" />
-          本機資料夾
-          <div className="relative group inline-block ml-1">
-            <button
-              className="cursor-help w-4 h-4 rounded-full bg-white/10 hover:bg-teal-500 hover:text-white text-[10px] text-gray-400 font-bold transition-all flex items-center justify-center border border-white/10 shadow-lg"
-              aria-label="說明"
-            >
-              ?
-            </button>
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 p-4 bg-slate-950/95 border border-white/10 rounded-2xl text-xs text-gray-300 shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 z-50 leading-relaxed font-sans font-normal backdrop-blur-md text-left">
-              把訓練成果（含 <span className="font-mono text-teal-400">weights/best.pt</span> 與{' '}
-              <span className="font-mono text-teal-400">args.yaml</span>）、權重檔或資料集放進下方路徑，
-              <span className="text-teal-400 font-bold">資料夾或 ZIP 皆可</span>。
-              掃描後勾選要載入的項目即可使用，掃描結果保留至後端關閉為止。
-            </div>
-          </div>
-        </h3>
-        <span className="text-[10px] text-teal-400 font-mono font-bold bg-teal-500/10 px-2 py-0.5 rounded-md">
-          No Upload
-        </span>
-      </div>
-
-      {/* 路徑顯示 */}
-      <div className="bg-slate-950/50 rounded-xl p-3.5 border border-white/5 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-gray-500 text-[10px] uppercase font-mono tracking-wider">
-            掃描目標路徑
-          </span>
+      {/* 路徑 */}
+      <div className="rounded-ds border border-ds-neutral-800 px-3 py-2.5 mb-3">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <span className="text-[10px] text-ds-neutral-600">掃描目標路徑</span>
           {libraryPath && (
             <button
               onClick={handleCopy}
-              className="text-[9px] px-2 py-1 bg-white/5 hover:bg-teal-500 hover:text-white border border-white/10 rounded-md transition-all cursor-pointer font-bold font-sans flex items-center gap-1 flex-shrink-0"
+              className="flex items-center gap-1 text-xs text-ds-neutral-500 hover:text-accent transition-colors cursor-pointer flex-shrink-0 rounded-ds-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
               title="複製路徑"
             >
               {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
@@ -183,33 +168,25 @@ const LocalLibraryPanel = () => {
             </button>
           )}
         </div>
-        <p
-          className="text-[10px] text-gray-300 font-mono break-all leading-relaxed"
-          title={libraryPath}
-        >
-          {pathLoading ? '讀取中...' : libraryPath || '（無法取得路徑）'}
+        <p className="text-xs text-ds-neutral-400 font-mono break-all leading-relaxed" title={libraryPath}>
+          {pathLoading ? '讀取中…' : libraryPath || '（無法取得路徑）'}
         </p>
         {!pathLoading && !libraryExists && (
-          <p className="text-[9px] text-amber-400 font-sans">
+          <p className="text-xs text-warning-300 mt-1.5">
             此資料夾尚未建立，啟動後端時會自動建立
           </p>
         )}
       </div>
 
-      {/* 掃描按鈕 */}
       <button
         onClick={scanLocalLibrary}
         disabled={busy || pathLoading}
-        className={`w-full py-2.5 text-white font-extrabold text-xs rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 font-sans ${
-          busy || pathLoading
-            ? 'bg-white/5 text-gray-500 cursor-not-allowed opacity-50'
-            : 'bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 hover:shadow-teal-500/20 cursor-pointer'
-        }`}
+        className="w-full flex items-center justify-center gap-2 py-2 rounded-ds border border-accent text-accent text-sm hover:bg-accent/10 active:bg-accent/20 transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
       >
         {isScanning ? (
           <>
             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-            掃描中...
+            掃描中…
           </>
         ) : (
           <>
@@ -219,17 +196,15 @@ const LocalLibraryPanel = () => {
         )}
       </button>
 
-      {/* 掃描摘要 */}
       {lastScanMessage && !scanError && (
-        <div className="p-3 bg-teal-500/10 border border-teal-500/30 text-teal-300 rounded-xl text-[11px] flex items-start gap-2">
-          <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <p className="flex items-start gap-2 mt-3 text-xs text-success-300">
+          <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           <span className="break-words">{lastScanMessage}</span>
-        </div>
+        </p>
       )}
 
-      {/* 候選清單 */}
       {candidates.length > 0 && (
-        <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
+        <div className="space-y-4 mt-4 max-h-[360px] overflow-y-auto pr-1">
           <CandidateGroup
             title="權重列表"
             Icon={Box}
@@ -249,21 +224,16 @@ const LocalLibraryPanel = () => {
         </div>
       )}
 
-      {/* 載入按鈕 */}
       {candidates.length > 0 && (
         <button
           onClick={registerLocalLibrarySelection}
           disabled={busy || selectedIds.length === 0}
-          className={`w-full py-2.5 text-white font-extrabold text-xs rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 font-sans ${
-            busy || selectedIds.length === 0
-              ? 'bg-white/5 text-gray-500 cursor-not-allowed opacity-50'
-              : 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 hover:shadow-indigo-500/20 cursor-pointer'
-          }`}
+          className="w-full flex items-center justify-center gap-2 mt-3 py-2 rounded-ds border border-accent text-accent text-sm hover:bg-accent/10 active:bg-accent/20 transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
         >
           {isRegistering ? (
             <>
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              載入中...
+              載入中…
             </>
           ) : (
             <>
@@ -274,21 +244,20 @@ const LocalLibraryPanel = () => {
         </button>
       )}
 
-      {/* 載入結果 */}
       {lastRegisterMessage && !scanError && (
-        <div className="p-3 bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 rounded-xl text-[11px] flex items-start gap-2">
-          <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <p className="flex items-start gap-2 mt-3 text-xs text-success-300">
+          <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           <span className="break-words">{lastRegisterMessage}</span>
-        </div>
+        </p>
       )}
 
       {scanError && (
-        <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl text-[11px] flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <p className="flex items-start gap-2 mt-3 text-xs text-danger-300">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           <span className="break-words">{scanError}</span>
-        </div>
+        </p>
       )}
-    </div>
+    </section>
   );
 };
 
