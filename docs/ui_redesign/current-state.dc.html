@@ -214,7 +214,7 @@ svg.lucide{width:1em;height:1em}
 </div>
 <div style="background:rgba(2,6,23,.3);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.05)">
 <span style="color:#6b7280;font-size:10px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:block">推論架構 (Arch)</span>
-<span style="color:#e5e7eb;font-family:'JetBrains Mono',monospace;font-weight:700;display:block;font-size:11px;margin-top:4px">ssdlite_small</span>
+<span style="color:#e5e7eb;font-family:'JetBrains Mono',monospace;font-weight:700;display:block;font-size:11px;margin-top:4px">ssdlite_mobilenet_v3_small</span>
 </div>
 <div style="background:rgba(2,6,23,.3);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.05)">
 <span style="color:#6b7280;font-size:10px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:.08em;display:block">優化器與輪數</span>
@@ -717,10 +717,10 @@ class Component extends DCLogic {
         { name: '平均精度 mAP@50', desc: 'IoU=0.5 條件下的平均精確度' }
       ],
       demoCards: [
-        { filename: 'IMG_2481.jpg', counts: 3, tagA: '柑橘潛葉蛾: 2', tagB: '葉部黃化: 1' },
-        { filename: 'IMG_2483.jpg', counts: 5, tagA: '介殼蟲: 3', tagB: '煤煙病: 2' },
-        { filename: 'IMG_2490.jpg', counts: 1, tagA: '木蝨: 1', tagB: '無其他病徵: 0' },
-        { filename: 'IMG_2502.jpg', counts: 4, tagA: '柑橘紅蜘蛛: 2', tagB: '潰瘍病斑: 2' }
+        { filename: 'IMG_2481.jpg', counts: 3, tagA: '潛葉蛾 (Leaf Miner): 2', tagB: '油斑病 (Oily Spot): 1' },
+        { filename: 'IMG_2483.jpg', counts: 5, tagA: '介殼蟲 (Scale Insect): 3', tagB: '煤煙病 (Sooty Mold): 2' },
+        { filename: 'IMG_2490.jpg', counts: 2, tagA: '薊馬 (Thrips): 1', tagB: '黑點病 (Black Spot): 1' },
+        { filename: 'IMG_2502.jpg', counts: 4, tagA: '蚜蟲 (Aphid): 2', tagB: '潰瘍病 (Canker): 2' }
       ],
       dsCards: [
         { en: 'Total Images', value: '4,463', label: '影像總數', sub: '3 個資料分割' },
@@ -729,18 +729,18 @@ class Component extends DCLogic {
         { en: 'Background Samples', value: '214', label: '空標註影像', sub: '佔 4.8%．負樣本用於降低假陽性' }
       ],
       classRows: [
-        { name: '柑橘潛葉蛾 leafminer', ann: '3,104', img: '1,882', pct: '27.7%', area: '0.0121' },
-        { name: '介殼蟲 scale', ann: '2,410', img: '1,455', pct: '21.5%', area: '0.0064' },
-        { name: '柑橘紅蜘蛛 mite', ann: '1,986', img: '1,201', pct: '17.7%', area: '0.0033' },
-        { name: '煤煙病 sooty mold', ann: '1,502', img: '968', pct: '13.4%', area: '0.0288' },
-        { name: '潰瘍病 canker', ann: '1,088', img: '742', pct: '9.7%', area: '0.0176' }
+        { name: 'Citrus_Leaf_Miner', ann: '3,104', img: '1,882', pct: '27.7%', area: '0.0121' },
+        { name: 'Scale_Insect', ann: '2,410', img: '1,455', pct: '21.5%', area: '0.0064' },
+        { name: 'Thrips', ann: '1,986', img: '1,201', pct: '17.7%', area: '0.0033' },
+        { name: 'Sooty_Mold', ann: '1,502', img: '968', pct: '13.4%', area: '0.0288' },
+        { name: 'Canker', ann: '1,088', img: '742', pct: '9.7%', area: '0.0176' }
       ],
       evalRows: [
-        { name: '柑橘潛葉蛾 leafminer', ap50: '0.912', ap: '0.641', recall: '0.874', area: '0.0121' },
-        { name: '介殼蟲 scale', ap50: '0.884', ap: '0.602', recall: '0.841', area: '0.0064' },
-        { name: '柑橘紅蜘蛛 mite', ap50: '0.771', ap: '0.463', recall: '0.702', area: '0.0033' },
-        { name: '煤煙病 sooty mold', ap50: '0.905', ap: '0.618', recall: '0.858', area: '0.0288' },
-        { name: '潰瘍病 canker', ap50: '0.862', ap: '0.577', recall: '0.803', area: '0.0176' }
+        { name: 'Citrus_Leaf_Miner', ap50: '0.912', ap: '0.641', recall: '0.874', area: '0.0121' },
+        { name: 'Scale_Insect', ap50: '0.884', ap: '0.602', recall: '0.841', area: '0.0064' },
+        { name: 'Thrips', ap50: '0.771', ap: '0.463', recall: '0.702', area: '0.0033' },
+        { name: 'Sooty_Mold', ap50: '0.905', ap: '0.618', recall: '0.858', area: '0.0288' },
+        { name: 'Canker', ap50: '0.862', ap: '0.577', recall: '0.803', area: '0.0176' }
       ],
       bestRows: [
         { metric: 'mAP@50', value: '0.8672', who: 'YOLOv8n · e300 · mosaic on · citrus_v4 / test' },
@@ -748,11 +748,11 @@ class Component extends DCLogic {
         { metric: 'Micro-Accuracy', value: '0.7412', who: 'YOLOv8s · e300 · citrus_v4 / test' }
       ],
       weightRows: [
-        { name: 'YOLOv8n · e300 · mosaic on', arch: 'yolo', source: 'LocalLibrary', sha: '6f2a1c9d', epochs: '300', size: '6.2 MB', map50: '0.8672', micro: '0.7284', evals: '6', last: '08-30 21:14' },
-        { name: 'YOLOv8s · e300 · no mosaic', arch: 'yolo', source: 'LocalLibrary', sha: 'a04be731', epochs: '300', size: '21.5 MB', map50: '0.8611', micro: '0.7412', evals: '5', last: '08-30 19:48' },
-        { name: 'YOLOv8n · e150', arch: 'yolo', source: '上傳 ZIP', sha: 'c19f80b2', epochs: '150', size: '6.2 MB', map50: '0.8104', micro: '0.6903', evals: '4', last: '08-29 15:20' },
-        { name: 'ssdlite_small · e120', arch: 'ssdlite_small', source: 'LocalLibrary', sha: 'd7e3aa15', epochs: '120', size: '14.1 MB', map50: '0.6014', micro: '0.5122', evals: '3', last: '08-28 11:03' },
-        { name: 'YOLOv8n · e300 · albument', arch: 'yolo', source: '上傳權重', sha: 'ff0912cd', epochs: '300', size: '6.2 MB', map50: '0.8549', micro: '0.7190', evals: '2', last: '08-27 22:41' }
+        { name: 'YOLOv8n · e300 · mosaic on', arch: 'yolo', source: '本機資料夾', sha: '6f2a1c9d', epochs: '300', size: '6.2 MB', map50: '0.8672', micro: '0.7284', evals: '6', last: '08-30 21:14' },
+        { name: 'YOLOv8s · e300 · no mosaic', arch: 'yolo', source: '本機資料夾', sha: 'a04be731', epochs: '300', size: '21.5 MB', map50: '0.8611', micro: '0.7412', evals: '5', last: '08-30 19:48' },
+        { name: 'YOLOv8n · e150', arch: 'yolo', source: 'ZIP 訓練成果', sha: 'c19f80b2', epochs: '150', size: '6.2 MB', map50: '0.8104', micro: '0.6903', evals: '4', last: '08-29 15:20' },
+        { name: 'ssdlite_small · e120', arch: 'ssdlite_mobilenet_v3_small', source: '本機資料夾', sha: 'd7e3aa15', epochs: '120', size: '14.1 MB', map50: '0.6014', micro: '0.5122', evals: '3', last: '08-28 11:03' },
+        { name: 'YOLOv8n · e300 · albument', arch: 'yolo', source: '單一權重檔', sha: 'ff0912cd', epochs: '300', size: '6.2 MB', map50: '0.8549', micro: '0.7190', evals: '2', last: '08-27 22:41' }
       ]
     };
   }
