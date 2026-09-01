@@ -4,11 +4,15 @@
 
 ## 先讀哪份文件
 
-三份文件分工不同，不要互相重複內容：
+前三份是常態文件，分工不同，不要互相重複內容：
 
 - **[README.md](README.md)** — 給人類使用者看的：功能特色、安裝、啟動方式。
 - **[docs/architecture.md](docs/architecture.md)** — 每個子系統「為什麼這樣設計」的完整脈絡，含實測數據、被否決的替代方案、關鍵地雷的詳細說明。**修改任何子系統前務必先讀對應章節**，很多看似奇怪的寫法背後有已驗證過的理由。
 - **本檔案** — 開發流程、跨子系統的硬規則、以及不值得寫進 architecture.md 但會讓你浪費半小時的細節。
+
+另外還有一份**提案性質**的文件，只有在要動 UI 風格時才需要讀：
+
+- **[docs/ui_redesign/](docs/ui_redesign/)** — 現況 UI 的重建樣板，以及以 Nocturne 設計系統提出的重新設計方向。**這是提案，一行都還沒實作**，`ShowResultsWeb/frontend` 目前仍是既有的 Tailwind + 多色語彙。開檔方式與已知缺口見 [docs/ui_redesign/github.md](docs/ui_redesign/github.md)。要注意 Nocturne 目前**沒有語意色與類別色 token**，而 `classMap.js` / `chartTheme.js` / `evalTheme.js` 的顏色是帶語意的資料，不是裝飾——採用前得先補這兩組 token。
 
 ## 專案速覽
 
@@ -108,7 +112,7 @@ E2E_ASSETS_DIR=<path> python e2e_tests/e2e_test.py   # 早期的上傳流程煙�
 - 評估**不自己實作 mAP**，一律走 `model.val()`——自行實作 IoU 配對與 PR 積分容易在細節上算錯，交出一個和 ultralytics 對不上的數字在學術場合是負分。同理刻意不做 COCO 式分桶 AP。
 - 已完成的評估結果**跨重啟保留，且不做「來源 session 還在嗎」的孤兒清除**（與 `export_service` 明確不同）——本專案多數 session 來自不落地的 LocalLibrary，那個過濾等於每次重啟刪光，而一次評估要跑 4 分鐘。
 
-完整清單見 [docs/architecture.md 已知限制](docs/architecture.md#9-已知限制)。
+完整清單見 [docs/architecture.md 已知限制](docs/architecture.md#12-已知限制)。
 
 ## 提交與推送慣例
 

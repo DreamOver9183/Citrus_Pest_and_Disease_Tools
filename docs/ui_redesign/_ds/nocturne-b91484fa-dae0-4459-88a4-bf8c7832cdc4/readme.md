@@ -2,12 +2,20 @@
 
 Nocturne is a quiet, compact dark interface: a near-neutral blue-grey ground, Inter at medium weight, soft 8px radii and an accent used as a line and a glow rather than a flood. Rules fade to transparent at their ends — over 48px a side — rather than stopping cleanly; short accent marks stay solid. Contrast comes from the tonal ramps, not from saturation, and photographs blend into the page with their dark values falling away.
 
+## Import scope (this repo)
+
+Only the token sheet and this guide were imported into `Citrus_Pest_and_Disease_Tools`:
+`styles.css` and `readme.md` (plus `_ds_manifest.json` and an empty `_ds_bundle.js`).
+The foundation pages, component pages, `theme.json`, `theme.html`, `thumbnail.html`,
+`templates/` and `assets/` are **not** in this repository — the sections below describe
+the full Nocturne system, so treat any reference to those files as "not available here,
+re-export the design system if you need it".
+
 ## How to use this
 
 - Link the one stylesheet from every page — `<link rel="stylesheet" href="styles.css">` (adjust the relative path) — and take every color, font, spacing, radius and shadow from its variables (`var(--color-*)`, `var(--font-*)`, `var(--space-*)`, `var(--radius-*)`, `var(--shadow-*)`). Never hard-code a hex, a font name or a px value the tokens already carry.
-- Build with the classes below rather than inventing parallel ones; the component pages are plain HTML, so view source and copy the markup.
-- `templates/` holds starting points a consuming project can copy whole.
-- The whole system was derived from `theme.json`. To change the look, edit the tokens at the top of `styles.css` — every page, the thumbnail and this guide read from them — and keep `theme.json` and the written guidance in step so they don't drift from what the CSS actually does.
+- Build with the classes below rather than inventing parallel ones. (The component pages that would let you view source and copy the markup were not imported — `styles.css` is the authority here.)
+- To change the look, edit the tokens at the top of `styles.css` — this guide reads from them — and keep the written guidance in step so it doesn't drift from what the CSS actually does. (`theme.json`, the machine-readable record these files were derived from, was not imported.)
 
 ## Direction
 
@@ -31,17 +39,17 @@ Interactive states are themed, never browser defaults: give every interactive el
 
 ## Components
 
-| Class | What it is | Shown in |
-| --- | --- | --- |
-| `.btn` with `.btn-primary`, `.btn-secondary`, `.btn-ghost`, `.btn-icon`, `.btn-block` | Actions — the primary is an accent outline, never a fill | components/buttons.html |
-| `.tag` with `.tag-accent`, `.tag-accent-2`, `.tag-neutral`, `.tag-outline` | Small labels tinted from the ramps (mono palette: accent-2 reads the same as accent) | components/buttons.html |
-| `.field` + `label`, `.input`, `.radio` + `.dot`, `.seg` + `.seg-opt` | Form fields and choices on native elements — no script | components/forms.html |
-| `.card` with `.card-kicker`, `.card-title`, `.card-body`, `.card-meta`; `.elev-sm/md/lg` | Surface-filled content cards; elevation utilities | components/cards.html |
-| `.nav` + `.nav-brand` | The header bar | components/navigation.html |
-| `.table` | Data tables with themed header and row rules | components/table.html |
-| `.dialog-backdrop` + `.dialog` (+ `.dialog-title/-body/-actions`) | A modal at the top elevation | components/dialog.html |
-| `.hr` | A horizontal rule — present, but this system prefers whitespace; avoid it | — |
-| `.lighten` | The image wrapper — every content photograph goes through it | foundations/image.html |
+| Class | What it is |
+| --- | --- |
+| `.btn` with `.btn-primary`, `.btn-secondary`, `.btn-ghost`, `.btn-icon`, `.btn-block` | Actions — the primary is an accent outline, never a fill |
+| `.tag` with `.tag-accent`, `.tag-accent-2`, `.tag-neutral`, `.tag-outline` | Small labels tinted from the ramps (mono palette: accent-2 reads the same as accent) |
+| `.field` + `label`, `.input`, `.radio` + `.dot`, `.seg` + `.seg-opt` | Form fields and choices on native elements — no script |
+| `.card` with `.card-kicker`, `.card-title`, `.card-body`, `.card-meta`; `.elev-sm/md/lg` | Surface-filled content cards; elevation utilities |
+| `.nav` + `.nav-brand` | The header bar |
+| `.table` | Data tables with themed header and row rules |
+| `.dialog-backdrop` + `.dialog` (+ `.dialog-title/-body/-actions`) | A modal at the top elevation |
+| `.hr` | A horizontal rule — present, but this system prefers whitespace; avoid it |
+| `.lighten` | The image wrapper — every content photograph goes through it |
 
 States are built in: hovers and pressed states come from the accent ramp, keyboard focus is the 2px accent `:focus-visible` ring, `::selection` is an accent tint, and disabled controls drop to 45% opacity. Don't restyle them per page. The accent-to-ground pair is tuned to at least 3:1 — enough for icons, large text and interface chrome, not for body copy — so for paragraph-size text in the accent use a deep ramp step (`--color-accent-300` on this ground) rather than the accent itself.
 
@@ -61,21 +69,13 @@ States are built in: hovers and pressed states come from the accent ramp, keyboa
 
 ## Files
 
+Present in this repository:
+
 - `styles.css` — the only stylesheet: the token sheet (`:root` variables, ramps, base type) plus the component layer. Link it from every page.
 - `readme.md` — this guide.
-- `theme.json` — the parameters these files were derived from (a machine-readable record of the theme).
-- `thumbnail.html` — the project cover (brand mark + swatches).
-- `foundations/type.html` — the type scale and the heading/body pairing at real sizes.
-- `foundations/color.html` — color roles and the 100-900 tonal ramps, with usage notes.
-- `foundations/layout.html` — the spacing scale, the grid and how edges are drawn.
-- `foundations/icons.html` — the icon set at interface sizes, inline and in buttons.
-- `foundations/image.html` — how photographs and figures are treated.
-- `components/buttons.html` — buttons, icon buttons and tags in every variant and state.
-- `components/forms.html` — text fields, radios and the segmented control on native elements.
-- `components/cards.html` — content cards and the elevation steps.
-- `components/navigation.html` — the header bar pattern.
-- `components/table.html` — a data table with the themed header and row rules.
-- `components/dialog.html` — a modal over its backdrop at the top elevation.
-- `theme.html` — the theme's parameters rendered as a reference sheet.
-- `templates/landing/` — a starter page consuming the system the intended way (`index.html`, its `ds-base.js` loader, and the vendored `image-slot.js` its photograph mounts).
-- `assets/photo.jpg` — the reference photograph the imagery page treats.
+- `_ds_manifest.json` — the token list and card index the design canvas reads.
+- `_ds_bundle.js` — the component bundle; empty here, since no components were exported.
+- `_adherence.oxlintrc.json` — an oxlint ruleset that flags raw hex/px/font-family literals. This project has no lint toolchain (see CLAUDE.md), so nothing runs it; it is kept as a written statement of the system's constraints.
+
+Not imported (part of the full Nocturne export, re-export the design system if you need them):
+`theme.json`, `theme.html`, `thumbnail.html`, `foundations/*.html`, `components/*.html`, `templates/deck/`, `templates/landing/`, `assets/photo.jpg`.

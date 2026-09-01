@@ -632,6 +632,7 @@ TP/FP/FN 取自 ultralytics `val()` 累積的混淆矩陣（`results.confusion_m
   ONNX 的 FP16 轉換失敗在 ultralytics 內是**被捕捉並警告**的，等於會靜默交出一個標著 FP16 的 FP32 檔。
 - COCO 與 Pascal VOC 的資料集解析未經真實素材驗證（本專案只有 YOLO 資料集），僅依規格實作；UI 已明確標示。
 - 前端沒有測試框架（`package.json` 無 `test` script，CI 只做 build），前端的驗證僅有 `npm run build` 與人工走查。
+- **`index.css` 匯入的 Outfit / Space Grotesk / JetBrains Mono 實際上幾乎沒有生效。** `index.css` 把 `body` 的 `font-family` 設成 Outfit，但 `App.jsx` 在最外層 div 掛了 `font-sans`，而 `tailwind.config.js` 的 `theme.extend` 是空的——Tailwind 預設的 `font-sans` 是 `ui-sans-serif, system-ui, sans-serif, …`，會蓋掉 body 的設定並沿 DOM 繼承下去（`font-sans` 在原始碼出現 76 次、`font-mono` 117 次）。結果是整個介面其實用系統字型渲染（Windows 上是 Segoe UI 與 Consolas），那三個 Google Font 只有 `.markdown-content` 的少數規則真的用到。畫面本身看起來是正常的，所以一直沒被發現；`docs/ui_redesign/current-state.dc.html` 之所以用 Outfit 渲染，正是因為它照 `index.css` 而不是照實際的繼承鏈重建。修法二選一：把字型加進 `theme.extend.fontFamily`（畫面會實際變樣，76＋117 處都受影響，得逐頁走查），或拿掉 `index.css` 的 `@import` 與 `body` 的 `font-family`（畫面零變化，少一個開機時的外部網路請求，對「本地離線」的定位更一致）。**尚未決定，先記錄**。
 - 資料集分析是單一同步請求（實測 16,043 個成員約 1.1 秒）。日後若在前面加反向代理，預設約 60 秒的逾時可能截斷超大資料集；回應中的 `analysis_ms` 可用來觀測這個天花板。
 - LocalLibrary 掃描在 Docker 下完全依賴 `docker-compose.yml` 的 `./LocalLibrary:/app/LocalLibrary:ro` 掛載。若忘記這條掛載，容器內的目錄是空的，掃描會回報「找不到可辨識內容」而**不是錯誤**——無法從容器內部可靠判斷一個目錄是不是真的 bind mount。
 - LocalLibrary 目錄走訪用 `follow_symlinks=False` 避免遞迴逃出根目錄，但樹內的**檔案**符號連結仍會被 `open()` 跟隨讀取。這在「單一本機操作者放自己的檔案」的前提下是可接受的；若部署模型改成多使用者或對外服務，需重新評估。
