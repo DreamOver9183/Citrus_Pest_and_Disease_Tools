@@ -46,10 +46,26 @@ _LAST_ERROR: Optional[str] = None
 _FORCE_OFFLINE = False
 
 
+def _name_from_url(url: str) -> str:
+    return url.split(":", 1)[0].split("+", 1)[0] or "unknown"
+
+
 def backend_name(url: Optional[str] = None) -> str:
-    """給 /api/registry/stats 顯示用的引擎名稱（sqlite / postgresql / …）。"""
-    target = url or DATABASE_URL
-    return target.split(":", 1)[0].split("+", 1)[0] or "unknown"
+    """給 /api/registry/stats 顯示用的引擎名稱（sqlite / postgresql / …）。
+
+    **已經有 engine 時一律回報「實際連上的」那個，而不是 `DATABASE_URL` 的設定值。**
+    兩者會不一致：`reset_for_tests()` 會把連線換掉而不動環境變數，於是 CI 的
+    PostgreSQL 那一輪裡，engine 明明綁在 tmp SQLite 上，這裡卻回報 postgresql。
+    這個值是前端「資料庫引擎」欄位的唯一來源，報錯的引擎比報「不知道」更糟。
+
+    沒有 engine 時（還沒 init、或連不上而降級）才退回設定值——此時「我試著連的是
+    什麼」正是呼叫端要的資訊，`routers/registry.py` 的 503 details 就依賴這個。
+    """
+    if url is not None:
+        return _name_from_url(url)
+    if _ENGINE is not None:
+        return _ENGINE.dialect.name or "unknown"
+    return _name_from_url(DATABASE_URL)
 
 
 def _build_engine(url: str):
