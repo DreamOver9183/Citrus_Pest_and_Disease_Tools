@@ -3,8 +3,8 @@
 這份文件記錄「要把 Nocturne 套到本專案」時必須先定下來的決定，以及已經定案的部分。
 設計方向本身見 `redesign-proposal.dc.html`，現況樣板見 `current-state.dc.html`。
 
-**目前狀態：B1–B4 全部定案，一行程式碼都還沒改。** 尚未決定的只剩遷移順序，
-以及其餘五個分頁的重新設計（目前只有「模型與裝置」有樣板）。
+**目前狀態：B1–B4 全部定案，基礎建設層已實作（見最後一節）。**
+元件外觀尚未遷移。
 
 ---
 
@@ -220,7 +220,54 @@ export default {
 
 ---
 
+## 已完成：基礎建設層
+
+只鋪管線、不改任何元件外觀。改動三個檔案：
+
+| 檔案 | 做了什麼 |
+| --- | --- |
+| `src/styles/nocturne-tokens.css` | **新增。** 由 `_ds/…/styles.css` 與 `nocturne-extension.css` 的 `:root` 區塊合併產生，158 個 token。只取 token，不取 Nocturne 的元件層。改動來源後要重新產生。 |
+| `tailwind.config.js` | 把 token 接成 utility。顏色一律 `rgb(var(--x-rgb) / <alpha-value>)`。 |
+| `src/index.css` | 匯入 token 檔；Google Fonts 從 Outfit/Space Grotesk 換成 Inter/Noto Sans TC（JetBrains Mono 保留）；`body` 的 `font-family` 改讀 `theme('fontFamily.sans')`。 |
+
+### 刻意沒有覆寫的東西
+
+`borderRadius` / `boxShadow` / `spacing` 都用 **`ds-` 前綴另開一組**（`rounded-ds`、
+`shadow-ds-lg`、`p-ds-4`），沒有覆寫 Tailwind 既有的尺度。原因：`rounded` 在原始碼
+用了 247 處、`shadow` 97 處，覆寫會讓全站立刻變樣，而基礎建設層的前提就是不改外觀。
+逐頁遷移時再把元件換成 `ds-` 這組。
+
+`ds-neutral` 同理——不覆寫 Tailwind 內建的 `neutral`（目前雖然 0 處在用，覆寫仍是
+看不見的地雷）。
+
+`body` 的 `background-color` 也維持原本的 `#030712`，沒有換成 `var(--color-bg)`——
+那是換皮，屬於逐頁遷移。
+
+### 唯一改變畫面的一項：字型
+
+這同時是在修 `docs/architecture.md` §12 記錄的既有問題。實測確認（Vite dev server +
+瀏覽器）：
+
+- `font-sans` → `Inter, "Noto Sans TC", system-ui, …`（原本被 Tailwind 預設的
+  `ui-sans-serif` 蓋掉，實際是系統字型）
+- `font-mono` → `"JetBrains Mono", ui-monospace, …`（原本是 Consolas）
+- 三個字型都確認真的載入（用 canvas 量測寬度比對 fallback，不是只看 CSS 宣告）
+- token 在執行期取得到：`--color-cat-1-500` = `#d3798f`、`--color-cat-1-500-rgb` = `211 121 143`
+- 六個分頁切換正常，console 零錯誤
+
+**architecture.md §12 的那一條可以結案了**，但留著到元件遷移完成再一起刪，
+免得中途有人以為字型問題還在。
+
+### 還開著的：字型要不要自架
+
+現在仍然是一個 Google Fonts 請求（只是換了字族）。對「本地離線」的定位，正解是用
+`@fontsource` 系列套件自架，但那會新增 npm 依賴——CLAUDE.md 對依賴變動有明確的謹慎
+要求，所以留給人決定，沒有擅自加。
+
+---
+
 ## 還沒決定的
 
-- 遷移順序：一次全改，還是一個分頁一個分頁換（後者需要新舊 token 並存一段時間）。
-- 六個分頁各自的重新設計——目前只有「模型與裝置」有樣板，其餘五頁未涵蓋。
+- 字型是否改用 `@fontsource` 自架（見上）。
+- 遷移順序：一次全改，還是一個分頁一個分頁換。
+- 其餘五個分頁的重新設計——目前只有「模型與裝置」有樣板。
