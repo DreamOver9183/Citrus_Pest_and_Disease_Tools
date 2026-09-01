@@ -23,10 +23,15 @@ export const ARCH_STYLES = {
   unknown: 'bg-slate-500/10 text-slate-300 border-slate-500/30',
 };
 
+// 鍵一律是後端送出的 `source_type` 字面值（CLAUDE.md 硬規則 4：這是精確比對、
+// 沒有模糊匹配的字串）。`library_scanner` 送的是 **local_library_run**，不是
+// `local_library`——少了那個鍵時，本機資料夾的權重會退回 unknown 樣式並把原始
+// 字串直接印在徽章上。兩個都留著，日後任一邊改動都不會再掉出對照表。
 export const SOURCE_STYLES = {
   zip: 'bg-violet-500/10 text-violet-300 border-violet-500/30',
   single_weight: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
   local_library: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30',
+  local_library_run: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30',
   unknown: 'bg-slate-500/10 text-slate-300 border-slate-500/30',
 };
 
@@ -34,6 +39,7 @@ export const SOURCE_LABELS = {
   zip: 'ZIP 訓練成果',
   single_weight: '單一權重檔',
   local_library: '本機資料夾',
+  local_library_run: '本機資料夾',
 };
 
 export const archStyle = (arch) => ARCH_STYLES[arch] || ARCH_STYLES.unknown;

@@ -4,31 +4,35 @@
 // production build 會整個消失。因此所有依格式/狀態變動的樣式都用查表，
 // 與 metric-dashboard/ModelMetricCard.jsx 的 ACCENT_STYLES 同一慣例。
 
-// 與 SystemSpecs 卡片上既有的格式徽章配色一致
+// 格式徽章。走中性外框而不是各給一個色相：Nocturne 的原則是 accent 之外保持低彩度，
+// 而「onnx 還是 litert」文字本身就講完了，不需要再用顏色講一次。
+// 彩度留給真正帶語意的資料，見 docs/ui_redesign/adoption-notes.md 的 B1。
 export const FORMAT_BADGE = {
-  onnx: 'bg-blue-500/15 text-blue-400 border-blue-500/25',
-  litert: 'bg-green-500/15 text-green-400 border-green-500/25',
+  onnx: 'border-ds-neutral-700 text-ds-neutral-400',
+  litert: 'border-ds-neutral-700 text-ds-neutral-400',
 };
 
 export const formatBadgeClass = (fmt) =>
-  FORMAT_BADGE[fmt] || 'bg-gray-500/15 text-gray-400 border-gray-500/25';
+  FORMAT_BADGE[fmt] || 'border-ds-neutral-800 text-ds-neutral-500';
 
-// job 狀態 -> 呈現樣式
+// job 狀態 -> 呈現樣式。對照 adoption-notes.md 的 B1：
+// queued 中性、running 用 accent（正在發生的事就是畫面上唯一的 accent，
+// 所以刻意不另設 info 角色）、done 走 success、failed 走 danger。
 export const STATE_STYLES = {
   queued: {
-    chip: 'bg-white/5 text-gray-400 border-white/10',
+    chip: 'border-ds-neutral-700 text-ds-neutral-400',
     label: '排隊中',
   },
   running: {
-    chip: 'bg-orange-500/10 text-orange-400 border-orange-500/25',
+    chip: 'border-accent text-accent',
     label: '進行中',
   },
   done: {
-    chip: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    chip: 'border-success-700 text-success-300',
     label: '已完成',
   },
   failed: {
-    chip: 'bg-red-500/10 text-red-400 border-red-500/30',
+    chip: 'border-danger-700 text-danger-300',
     label: '失敗',
   },
 };
