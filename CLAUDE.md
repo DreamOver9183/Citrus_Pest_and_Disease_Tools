@@ -12,7 +12,7 @@
 
 另外還有一份**提案性質**的文件，只有在要動 UI 風格時才需要讀：
 
-- **[docs/ui_redesign/](docs/ui_redesign/)** — 現況 UI 的重建樣板，以及以 Nocturne 設計系統提出的重新設計方向。**這是提案，一行都還沒實作**，`ShowResultsWeb/frontend` 目前仍是既有的 Tailwind + 多色語彙。開檔方式與已知缺口見 [docs/ui_redesign/github.md](docs/ui_redesign/github.md)。要注意 Nocturne 目前**沒有語意色與類別色 token**，而 `classMap.js` / `chartTheme.js` / `evalTheme.js` 的顏色是帶語意的資料，不是裝飾——採用前得先補這兩組 token。
+- **[docs/ui_redesign/](docs/ui_redesign/)** — 現況 UI 的重建樣板，以及以 Nocturne 設計系統提出的重新設計方向。**這是提案，一行都還沒實作**，`ShowResultsWeb/frontend` 目前仍是既有的 Tailwind + 多色語彙。開檔方式見 [docs/ui_redesign/github.md](docs/ui_redesign/github.md)；**採用前必須先讀 [docs/ui_redesign/adoption-notes.md](docs/ui_redesign/adoption-notes.md)**——它記錄了四個已定案的前置決策（語意色與類別色怎麼補、模型頁與登錄簿的分工、分頁數、Tailwind 怎麼接），以及一條會讓人踩到的限制：前端有 376 處透明度修飾詞，token 必須另備 RGB 通道版本。
 
 ## 專案速覽
 
