@@ -6,211 +6,117 @@ import LiveDemo from './components/LiveDemo';
 import DatasetAnalyzer from './components/DatasetAnalyzer';
 import Evaluation from './components/Evaluation';
 import Registry from './components/Registry';
-import { Layers, Activity, BarChart2, Zap, Cpu, Database, Sparkles, Server, CheckCircle2, FolderTree, GaugeCircle, Library } from 'lucide-react';
+import { Layers, Activity, BarChart2, Leaf, CheckCircle2, FolderTree, GaugeCircle, Library } from 'lucide-react';
 
+// 分頁定義。
+//
+// `gated` 表示需要先載入模型才能進入。**權重登錄簿刻意不設閘門**：它記的是跨 session
+// 的長期事實，一個模型都沒載入時仍然要能查得到歷史紀錄——那正是它存在的理由。
+const TABS = [
+  { id: 'init', label: '模型與裝置', Icon: Activity, gated: false, title: '載入模型與選擇推論裝置' },
+  { id: 'metrics', label: '消融分析', Icon: BarChart2, gated: true, title: '消融指標與精度分析' },
+  { id: 'demo', label: '即時診斷', Icon: Layers, gated: true, title: '即時影像多標籤診斷' },
+  { id: 'dataset', label: '資料集', Icon: FolderTree, gated: false, title: '資料集格式辨識與標註統計分析' },
+  { id: 'evaluate', label: '驗證評估', Icon: GaugeCircle, gated: true, title: '讓模型實跑資料集，計算當下的指標' },
+  { id: 'registry', label: '權重登錄簿', Icon: Library, gated: false, title: '以權重雜湊為身分的長期帳本：訓練超參數與歷次實測指標' },
+];
+
+// 全域 shell：header、分頁列、內容區、footer。
+//
+// Nocturne 版本。與舊版的三個差異都是設計系統的直接後果：
+//
+// 1. **六個分頁不再各有主色**，一律走單一 accent 的底線。Nocturne 是單 accent 系統，
+//    彩度留給真正帶語意的資料（偵測類別、圖表序列、job 狀態），見
+//    docs/ui_redesign/adoption-notes.md 的 B1。
+// 2. **拿掉四顆飽和色的背景光暈與網格疊層**。Nocturne 明講底色要保持去飽和、用柔和的
+//    漸層深度而不是大面積填色，那四顆 blur 正好是它說不要做的事。
+// 3. **主要動作一律外框、不填色**，包含 header 的品牌標記。
 const AppContent = () => {
   const { activeTab, setActiveTab, isUnzipped, loading, sessionCount, currentDeviceLabel } = useExperiment();
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#030612] text-gray-100 flex flex-col items-center justify-center gap-4 select-none">
-        <div className="relative flex items-center justify-center">
-          <div className="w-16 h-16 border-2 border-orange-500/10 border-t-orange-500 rounded-full animate-spin"></div>
-          <Zap className="absolute w-6 h-6 text-orange-500 animate-pulse" />
-        </div>
+      <div className="min-h-screen bg-ground text-ink flex flex-col items-center justify-center gap-4 select-none">
+        <div className="w-10 h-10 border-2 border-ds-neutral-800 border-t-accent rounded-full animate-spin" />
         <div className="text-center space-y-1">
-          <span className="text-xs font-semibold text-gray-300 font-sans tracking-wide">初始化柑橘病蟲害工具包...</span>
-          <p className="text-[10px] text-gray-500 font-mono tracking-widest uppercase">Initializing NVIDIA CUDA & GEMINI LLM Fallbacks</p>
+          <p className="text-sm text-ink">初始化柑橘病蟲害工具包…</p>
+          <p className="text-xs text-ds-neutral-600">正在偵測推論裝置與既有的模型 session</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="relative min-h-screen bg-[#020510] text-gray-100 flex flex-col justify-between overflow-hidden font-sans selection:bg-orange-500/30 selection:text-white">
-      {/* 磨砂多色彩背景裝飾圓 (Dynamic Multi-Colored Ambient Glows for Professional Vibe) */}
-      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-orange-600/10 blur-[130px] pointer-events-none"></div>
-      <div className="absolute top-[20%] right-[-10%] w-[45vw] h-[45vw] rounded-full bg-teal-600/8 blur-[120px] pointer-events-none"></div>
-      <div className="absolute bottom-[20%] left-[-15%] w-[40vw] h-[40vw] rounded-full bg-pink-600/6 blur-[110px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-5%] w-[50vw] h-[50vw] rounded-full bg-indigo-600/10 blur-[150px] pointer-events-none"></div>
-      
-      {/* 科技感點陣背景疊加 (Grid matrix overlay) */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff02_1px,transparent_1px),linear-gradient(to_bottom,#ffffff02_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none"></div>
-
-      <div className="z-10 w-full">
-        {/* 精美玻璃導覽列 (Navbar) */}
-        <header className="sticky top-0 z-40 bg-[#040817]/85 backdrop-blur-md border-b border-white/[0.06] shadow-2xl transition-all">
-          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between flex-wrap gap-4">
-            
-            {/* 標題與標籤 */}
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl shadow-[0_0_15px_rgba(249,115,22,0.25)] flex items-center justify-center">
-                <Zap className="w-5 h-5 text-white animate-pulse" />
-              </div>
-              <div className="text-left">
-                <div className="flex items-center gap-2">
-                  <h1 className="font-extrabold text-white tracking-tight text-lg font-sans">
-                    柑橘病蟲害工具包
-                  </h1>
-                  <span className="text-[9px] font-mono font-bold bg-orange-500/15 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-md uppercase tracking-wider">
-                    v3.5 Live
-                  </span>
-                </div>
-                <p className="text-[10px] text-gray-400 font-mono tracking-wide mt-0.5">
-                  Detection · Dataset Analysis · Model Export Toolkit
-                </p>
-              </div>
+    <div className="min-h-screen bg-ground text-ink flex flex-col">
+      <header className="sticky top-0 z-40 bg-ground/95 backdrop-blur-sm border-b border-ds-neutral-800">
+        <div className="max-w-7xl mx-auto px-6">
+          {/* 品牌與遙測 */}
+          <div className="flex items-center justify-between gap-4 flex-wrap py-3">
+            <div className="flex items-center gap-2.5">
+              <span className="w-6 h-6 rounded-ds-sm border border-accent text-accent flex items-center justify-center flex-shrink-0">
+                <Leaf className="w-3.5 h-3.5" />
+              </span>
+              <span className="text-sm font-medium text-ink">柑橘病蟲害工具包</span>
+              <span className="hidden sm:inline text-xs text-ds-neutral-600">
+                偵測 · 資料集分析 · 模型匯出
+              </span>
             </div>
 
-            {/* 實時遙測統計 Telemetry Widget */}
-            <div className="hidden xl:flex items-center gap-6 px-5 py-2.5 bg-slate-950/40 border border-white/[0.05] rounded-2xl">
-              {/* 統計 1: 模型數量 */}
-              <div className="flex items-center gap-2.5 border-r border-white/5 pr-5">
-                <Database className="w-4 h-4 text-orange-400" />
-                <div className="text-left font-mono">
-                  <div className="text-[9px] text-gray-500 uppercase">模型庫容量</div>
-                  <div className="text-xs text-white font-bold">{sessionCount} / 3 Sessions</div>
-                </div>
-              </div>
-
-              {/* 統計 2: 當前硬體 */}
-              <div className="flex items-center gap-2.5 border-r border-white/5 pr-5">
-                <Cpu className="w-4 h-4 text-indigo-400" />
-                <div className="text-left font-mono">
-                  <div className="text-[9px] text-gray-500 uppercase">當前推論設備</div>
-                  <div className="text-xs text-white font-bold truncate max-w-[140px]">{currentDeviceLabel || 'Auto'}</div>
-                </div>
-              </div>
-
-              {/* 統計 3: 安全狀態 */}
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <span className="text-[11px] font-bold text-emerald-400 font-sans tracking-wide">
-                  後端服務同步中
-                </span>
-              </div>
+            <div className="hidden md:flex items-center gap-5 text-xs text-ds-neutral-500">
+              <span>
+                插槽 <span className="text-ink tabular-nums">{sessionCount}/3</span>
+              </span>
+              <span className="truncate max-w-[180px]">
+                裝置 <span className="text-ink">{currentDeviceLabel || 'Auto'}</span>
+              </span>
             </div>
-
-            {/* 功能切換 Tabs (Multi-Colored, Clean Interactive Styling) */}
-            {/* 五個分頁在窄螢幕會超出一行，flex-wrap 讓它換行而不是撐破版面 */}
-            <nav className="flex flex-wrap items-center gap-y-1 bg-slate-950/70 p-1 rounded-xl border border-white/[0.08] shadow-inner font-sans">
-              <button
-                onClick={() => setActiveTab('init')}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                  activeTab === 'init'
-                    ? 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white shadow-lg shadow-teal-500/15 animate-glow-emerald'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <Activity className="w-3.5 h-3.5" />
-                模型與裝置
-              </button>
-
-              <button
-                onClick={() => isUnzipped && setActiveTab('metrics')}
-                disabled={!isUnzipped}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
-                  activeTab === 'metrics'
-                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/15 animate-glow-indigo'
-                    : !isUnzipped
-                    ? 'text-gray-600 cursor-not-allowed opacity-40'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5 cursor-pointer'
-                }`}
-                title={!isUnzipped ? "請先載入模型" : "消融指標與精度分析"}
-              >
-                <BarChart2 className="w-3.5 h-3.5" />
-                消融分析
-              </button>
-
-              <button
-                onClick={() => isUnzipped && setActiveTab('demo')}
-                disabled={!isUnzipped}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
-                  activeTab === 'demo'
-                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/15 animate-glow'
-                    : !isUnzipped
-                    ? 'text-gray-600 cursor-not-allowed opacity-40'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5 cursor-pointer'
-                }`}
-                title={!isUnzipped ? "請先載入模型" : "即時影像多標籤診斷"}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                即時診斷
-              </button>
-
-              <button
-                onClick={() => setActiveTab('dataset')}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                  activeTab === 'dataset'
-                    ? 'bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-lg shadow-rose-500/15 animate-glow-rose'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-                title="資料集格式辨識與標註統計分析"
-              >
-                <FolderTree className="w-3.5 h-3.5" />
-                資料集
-              </button>
-
-              <button
-                onClick={() => isUnzipped && setActiveTab('evaluate')}
-                disabled={!isUnzipped}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
-                  activeTab === 'evaluate'
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/15 animate-glow-cyan'
-                    : !isUnzipped
-                    ? 'text-gray-600 cursor-not-allowed opacity-40'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5 cursor-pointer'
-                }`}
-                title={!isUnzipped ? "請先載入模型" : "讓模型實跑資料集，計算當下的指標"}
-              >
-                <GaugeCircle className="w-3.5 h-3.5" />
-                驗證評估
-              </button>
-
-              {/* 登錄簿刻意**不設 isUnzipped 閘門**：它記的是跨 session 的長期事實，
-                  一個模型都沒載入時仍然要能查得到歷史紀錄——那正是它存在的理由。 */}
-              <button
-                onClick={() => setActiveTab('registry')}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
-                  activeTab === 'registry'
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/15'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5 cursor-pointer'
-                }`}
-                title="以權重雜湊為身分的長期帳本：訓練超參數與歷次實測指標"
-              >
-                <Library className="w-3.5 h-3.5" />
-                權重登錄簿
-              </button>
-            </nav>
-
           </div>
-        </header>
 
-        {/* 內容渲染主區 */}
-        <main className="min-h-[80vh]">
-          {activeTab === 'init' && <SystemSpecs />}
-          {activeTab === 'metrics' && <MetricDashboard />}
-          {activeTab === 'demo' && <LiveDemo />}
-          {activeTab === 'dataset' && <DatasetAnalyzer />}
-          {activeTab === 'evaluate' && <Evaluation />}
-          {activeTab === 'registry' && <Registry />}
-        </main>
-      </div>
+          {/* 分頁列。Nocturne 用底線標示目前位置，不用填色的膠囊 */}
+          <nav className="flex flex-wrap items-center gap-x-6 -mb-px">
+            {TABS.map(({ id, label, Icon, gated, title }) => {
+              const disabled = gated && !isUnzipped;
+              const active = activeTab === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => !disabled && setActiveTab(id)}
+                  disabled={disabled}
+                  title={disabled ? '請先載入模型' : title}
+                  aria-current={active ? 'page' : undefined}
+                  className={`flex items-center gap-1.5 py-2.5 text-sm border-b-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 ${
+                    active
+                      ? 'border-accent text-ink'
+                      : disabled
+                        ? 'border-transparent text-ds-neutral-700 cursor-not-allowed'
+                        : 'border-transparent text-ds-neutral-500 hover:text-ink cursor-pointer'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {label}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </header>
 
-      {/* 底部 Footer */}
-      <footer className="z-10 py-6 border-t border-white/[0.05] text-center bg-slate-950/40 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-[10px] text-gray-500 font-mono tracking-wide">
-            © 2026 Citrus Multi-Format (YOLO / SSD) Diagnosis Dashboard. Connected to FastAPI Core & PyTorch Engine.
-          </p>
-          <div className="flex items-center gap-4 text-[10px] text-gray-400 font-mono">
-            <span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> WebRTC Secure</span>
-            <span className="text-gray-600">|</span>
-            <span className="flex items-center gap-1"><Sparkles className="w-3.5 h-3.5 text-orange-400" /> GPU HyperThreaded</span>
-          </div>
+      <main className="flex-1">
+        {activeTab === 'init' && <SystemSpecs />}
+        {activeTab === 'metrics' && <MetricDashboard />}
+        {activeTab === 'demo' && <LiveDemo />}
+        {activeTab === 'dataset' && <DatasetAnalyzer />}
+        {activeTab === 'evaluate' && <Evaluation />}
+        {activeTab === 'registry' && <Registry />}
+      </main>
+
+      <footer className="border-t border-ds-neutral-800">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-ds-neutral-600">
+          <p>© 2026 柑橘病蟲害偵測工具包 · FastAPI + PyTorch（YOLO / SSDLite）</p>
+          <span className="flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-success-500" />
+            後端服務已連線
+          </span>
         </div>
       </footer>
     </div>

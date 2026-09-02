@@ -23,7 +23,14 @@ export const CHART_SERIES = [
 
 export const seriesColor = (index) => CHART_SERIES[index % CHART_SERIES.length];
 
-// split 固定色，與三個既有分頁的主色語彙一致
+// split 固定色。
+//
+// 這裡原本寫「與三個既有分頁的主色語彙一致」——那個耦合已經失效：shell 遷移到
+// Nocturne 之後分頁列只有單一 accent，不再各有主色。這三個色值現在是獨立的選擇，
+// 改動時不必再去對照分頁。
+//
+// 尚未換成 --color-cat-* 的 token：本檔的 CHART_SERIES 與 SPLIT_COLORS 屬於
+// 「資料集」分頁的遷移範圍，對應表已備妥於 docs/ui_redesign/adoption-notes.md 的 B1。
 export const SPLIT_COLORS = {
   train: '#f97316',
   valid: '#6366f1',
