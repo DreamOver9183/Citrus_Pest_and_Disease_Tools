@@ -25,7 +25,6 @@ const ValidationIssueList = ({ issues = [], expanded, onToggle }) => {
             <h3 className="font-extrabold text-white text-sm font-sans tracking-tight">
               資料集健檢
             </h3>
-            <p className="text-[10px] text-gray-400 font-mono mt-0.5">Validation Report</p>
           </div>
         </div>
 

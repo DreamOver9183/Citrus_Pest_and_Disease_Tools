@@ -6,7 +6,7 @@ import LiveDemo from './components/LiveDemo';
 import DatasetAnalyzer from './components/DatasetAnalyzer';
 import Evaluation from './components/Evaluation';
 import Registry from './components/Registry';
-import { Layers, Activity, BarChart2, Leaf, CheckCircle2, FolderTree, GaugeCircle, Library } from 'lucide-react';
+import { Layers, Activity, BarChart2, Leaf, FolderTree, GaugeCircle, Library } from 'lucide-react';
 
 // 分頁定義。
 //
@@ -57,9 +57,6 @@ const AppContent = () => {
                 <Leaf className="w-3.5 h-3.5" />
               </span>
               <span className="text-sm font-medium text-ink">柑橘病蟲害工具包</span>
-              <span className="hidden sm:inline text-xs text-ds-neutral-600">
-                偵測 · 資料集分析 · 模型匯出
-              </span>
             </div>
 
             <div className="hidden md:flex items-center gap-5 text-xs text-ds-neutral-500">
@@ -111,12 +108,8 @@ const AppContent = () => {
       </main>
 
       <footer className="border-t border-ds-neutral-800">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-ds-neutral-600">
-          <p>© 2026 柑橘病蟲害偵測工具包 · FastAPI + PyTorch（YOLO / SSDLite）</p>
-          <span className="flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5 text-success-500" />
-            後端服務已連線
-          </span>
+        <div className="max-w-7xl mx-auto px-6 py-4 text-xs text-ds-neutral-600">
+          © 2026 柑橘病蟲害偵測工具包
         </div>
       </footer>
     </div>

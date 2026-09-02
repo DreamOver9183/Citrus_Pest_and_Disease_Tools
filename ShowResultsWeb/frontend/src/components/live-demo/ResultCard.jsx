@@ -105,7 +105,7 @@ const ResultCard = ({ item, resultsCount, modelCustomName, onToggleOriginal, onZ
           {item.loading ? (
             <div className="flex flex-col items-center justify-center gap-3">
               <div className="w-8 h-8 border-3 border-orange-500/20 border-t-orange-500 rounded-full animate-spin"></div>
-              <span className="text-[10px] text-gray-500 font-mono">running inference...</span>
+              <span className="text-[10px] text-gray-500 font-mono">推論中…</span>
             </div>
           ) : item.resultUrl ? (
             <div className="relative w-full h-full">

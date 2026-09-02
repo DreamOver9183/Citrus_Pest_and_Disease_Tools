@@ -67,7 +67,7 @@ const ModelMetricCard = ({ model, imgUrl, sourcePath, metricHasData, imgAlt, onZ
         </span>
         {sourcePath && (
           <div className={`w-full p-2 bg-slate-950/75 rounded-lg border border-white/5 text-[9px] font-mono break-all leading-normal ${styles.sourceText}`}>
-            <span className="text-gray-500 block text-[8px] uppercase tracking-wider mb-0.5 font-sans font-bold">Inference Target File</span>
+            <span className="text-gray-500 block text-[8px] uppercase tracking-wider mb-0.5 font-sans font-bold">推論來源檔案</span>
             {sourcePath}
           </div>
         )}

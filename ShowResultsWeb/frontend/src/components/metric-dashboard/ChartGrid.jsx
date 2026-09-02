@@ -38,7 +38,6 @@ const ChartGrid = ({
               </div>
               <div className="text-left">
                 <h3 className="font-extrabold text-white text-sm font-sans tracking-tight">學術混淆矩陣消融分析 (Confusion Matrix)</h3>
-                <p className="text-[10px] text-gray-400 font-mono mt-0.5">Differentiates Citrus Body Pest from Physical Leaf Damages</p>
               </div>
             </div>
             {loadingMatrix && <RefreshCw className="w-4 h-4 text-indigo-400 animate-spin" />}

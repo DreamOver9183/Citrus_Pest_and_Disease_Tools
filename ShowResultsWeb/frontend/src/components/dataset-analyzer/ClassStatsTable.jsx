@@ -33,7 +33,6 @@ const ClassStatsTable = ({ stats, sort, onSort }) => {
         </div>
         <div className="text-left">
           <h3 className="font-extrabold text-white text-sm font-sans tracking-tight">類別明細</h3>
-          <p className="text-[10px] text-gray-400 font-mono mt-0.5">Per-Class Breakdown</p>
         </div>
       </div>
 
