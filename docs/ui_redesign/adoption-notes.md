@@ -354,6 +354,83 @@ export default {
 收成單一 accent 之後這個耦合失效了，註解已改寫（色值本身留待「資料集」分頁遷移時
 換成 `--color-cat-*`）。
 
+### 移除的裝飾性文案（已定案）
+
+方針：**非必要的裝飾文字一律刪除**。功能性標籤只是寫成英文的則翻成中文，不刪。
+
+刪除（純裝飾，其中數項還與事實不符——留著比刪掉更糟）：
+
+| 位置 | 原文 |
+| --- | --- |
+| footer | `WebRTC Secure`（本專案沒有用到 WebRTC） |
+| footer | `GPU HyperThreaded`（無實際意義） |
+| footer | `FastAPI + PyTorch（YOLO / SSDLite）` 技術棧列舉 |
+| footer | 「後端服務已連線」——靜態文字，並沒有反映真實連線狀態 |
+| header | `v3.5 Live` 徽章 |
+| header | `Detection · Dataset Analysis · Model Export Toolkit` 標語 |
+| 載入畫面 | `Initializing NVIDIA CUDA & GEMINI LLM Fallbacks`（沒有用到 Gemini） |
+| `ClassStatsTable` | `Per-Class Breakdown` |
+| `ValidationIssueList` | `Validation Report` |
+| `ChartGrid` | `Differentiates Citrus Body Pest from Physical Leaf Damages` |
+
+翻成中文（功能性標籤，不是裝飾）：
+
+| 位置 | 原文 | 現在 |
+| --- | --- | --- |
+| `ModelMetricCard` | `Inference Target File` | 推論來源檔案 |
+| `ResultCard` | `running inference...` | 推論中… |
+
+日後新增介面文字時比照這個方針：能刪的裝飾一律不留，資訊性文字用中文。
+
+### 驗證
+
+`npm run build` 與 `pytest`（352 passed）之外，實際開瀏覽器完整走過一遍：
+開抽屜 → 掃描（6 權重 / 2 資料集）→ 取消全選 → 勾選 → 載入 → Esc 關閉 → 展開列 →
+確認 mAP、來源徽章、匯出面板 → 移除 → 分頁切換。console 零錯誤。
+
+### 已知的過渡狀態
+
+全域 shell（header、分頁列、footer、背景光暈）仍是舊的橘色玻璃擬態，與 Nocturne 的
+內容區有明顯接縫。這是逐頁遷移的預期代價，會在其餘分頁與 shell 遷移後消失。
+
+---
+
+## 已完成：全域 shell
+
+`App.jsx`、`index.css`、`index.html`。三個改動都是設計系統的直接後果：
+
+1. **六個分頁不再各有主色**，一律走單一 accent 的底線（B1 定案 Nocturne 是單 accent
+   系統，彩度留給帶語意的資料）。連帶讓 `index.css` 的 `.animate-glow*` 五條規則失去
+   使用者。
+2. **拿掉四顆飽和色的背景光暈與網格疊層。** Nocturne 明講底色要保持去飽和、用柔和的
+   漸層深度而不是大面積填色，那四顆 blur 正好是它說不要做的事。
+3. **主要動作一律外框不填色**，包含 header 的品牌標記。
+
+`body` 底色改為 `var(--color-bg)`，`index.html` 不再寫死 `bg-[#080d1a]`。
+
+### 連帶清掉的死程式碼
+
+全 src 掃描（`.jsx` 與 `.js`）確認 0 處引用後移除，`index.css` 從 211 行降到 76 行、
+打包後的 CSS 從 55.6 kB 降到 49.6 kB：
+
+`.glass-card` / `.glass-card-hover`、`.bg-radial-gradient-*`（4 條）、
+`.border-gradient-*`（2 條）、`.animate-glow*`（5 條）、
+以及 `.markdown-content` 及其 14 條子規則（約 90 行）。
+
+**`.glass-panel` 保留**——其餘五個分頁還有 32 處在用，遷移完最後一頁時才能刪。
+
+### 一併發現：`react-markdown` 是未使用的依賴
+
+`.markdown-content` 那 90 行樣式沒有任何元件在用，因為 `react-markdown` **整個 src
+都沒有 import**，但它仍列在 `package.json` 的 `dependencies`。**依賴本身沒有動**——
+移除依賴是獨立的決定，CLAUDE.md 對依賴變動有明確的謹慎要求。
+
+### 順帶更新的過期註解
+
+`chartTheme.js` 的 `SPLIT_COLORS` 原本註明「與三個既有分頁的主色語彙一致」。分頁列
+收成單一 accent 之後這個耦合失效了，註解已改寫（色值本身留待「資料集」分頁遷移時
+換成 `--color-cat-*`）。
+
 ### 被改寫的裝飾性文案（需要你確認）
 
 舊 shell 有幾處與事實不符的裝飾文字，遷移時一併改掉，但這是**內容決定不是設計決定**，
