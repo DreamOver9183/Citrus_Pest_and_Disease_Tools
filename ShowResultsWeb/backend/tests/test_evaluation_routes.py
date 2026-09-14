@@ -6,6 +6,7 @@ monkeypatch 目標必須是**使用該名稱的模組**（`evaluation_service.EV
 patch 錯模組會悄悄不生效。
 """
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -61,7 +62,7 @@ def _add_dataset(tmp_path, did="ds_a", container=True):
     return did
 
 
-def _stub_run(monkeypatch, write_plot=False):
+def _stub_run(monkeypatch, write_plot=False, write_batch=False):
     """
     取代真實的 val()。真實流程會把圖表寫進 job_dir/val/，所以 write_plot 也照做——
     圖表端點有路徑包含檢查，把檔案放在 job 目錄之外會（正確地）被擋下。
@@ -76,6 +77,13 @@ def _stub_run(monkeypatch, write_plot=False):
             target = val_dir / "confusion_matrix.png"
             target.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 200)
             plots["confusion_matrix"] = str(target).replace("\\", "/")
+        if write_batch:
+            val_dir = job_dir / "val"
+            val_dir.mkdir(parents=True, exist_ok=True)
+            for suffix in ("labels", "pred"):
+                target = val_dir / f"val_batch0_{suffix}.jpg"
+                target.write_bytes(b"\xff\xd8\xff" + b"0" * 200)
+                plots[f"val_batch0_{suffix}"] = str(target).replace("\\", "/")
         # 形狀必須與真實的 _run_validation 一致（含 f1/fitness 與 micro 區塊），
         # 否則報告模板的新欄位在測試裡永遠不會被渲染到。
         return {
@@ -212,6 +220,49 @@ def test_plot_endpoint_serves_the_generated_image(client, tmp_path, monkeypatch)
     res = client.get(job["plot_urls"]["confusion_matrix"])
     assert res.status_code == 200
     assert res.content.startswith(b"\x89PNG")
+    assert res.headers["content-type"].startswith("image/png")
+
+
+def test_batch_mosaics_are_served_as_jpeg(client, tmp_path, monkeypatch):
+    """val_batch 拼圖是 .jpg，路由不能沿用寫死的 image/png。"""
+    _stub_run(monkeypatch, write_batch=True)
+
+    sid, did = _add_session(), _add_dataset(tmp_path)
+    body = data(client.post("/api/evaluations", json={"session_id": sid, "dataset_id": did}))
+    job = _wait(client, body["job"]["job_id"])
+
+    res = client.get(job["plot_urls"]["val_batch0_pred"])
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("image/jpeg")
+
+
+def test_restored_jobs_pick_up_plots_missing_from_old_manifests(client, tmp_path, monkeypatch):
+    """
+    manifest 記的是寫入當時的圖表清單。新增 _PLOT_FILES 項目後，舊 job 的 val/ 裡早就有
+    那些檔案——重啟還原時要重新蒐集，而不是永遠看不到。
+    """
+    _stub_run(monkeypatch)
+    sid, did = _add_session(), _add_dataset(tmp_path)
+    body = data(client.post("/api/evaluations", json={"session_id": sid, "dataset_id": did}))
+    job_id = body["job"]["job_id"]
+    _wait(client, job_id)
+
+    job_dir = Path(ev.EVAL_JOBS[job_id]["job_dir"])
+    deadline = time.monotonic() + 5
+    while not (job_dir / "manifest.json").exists() and time.monotonic() < deadline:
+        time.sleep(0.05)  # state=done 先於 manifest 寫入
+
+    val_dir = job_dir / "val"
+    val_dir.mkdir(parents=True, exist_ok=True)
+    for suffix in ("labels", "pred"):
+        (val_dir / f"val_batch0_{suffix}.jpg").write_bytes(b"\xff\xd8\xff" + b"0" * 200)
+
+    ev.EVAL_JOBS.clear()
+    ev.load_jobs_from_disk()
+
+    restored = data(client.get(f"/api/evaluations/{job_id}"))["job"]
+    assert "val_batch0_labels" in restored["plot_urls"]
+    assert client.get(restored["plot_urls"]["val_batch0_labels"]).status_code == 200
 
 
 def test_delete_evaluation(client, tmp_path, monkeypatch):

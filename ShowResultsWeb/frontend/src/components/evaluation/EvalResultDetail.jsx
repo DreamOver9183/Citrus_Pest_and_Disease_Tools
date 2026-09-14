@@ -14,13 +14,19 @@ const KPI = ({ label, value, accent }) => (
 // 單一評估結果的完整檢視。
 const EvalResultDetail = ({ job, onOpenPlot }) => {
   const [plotKey, setPlotKey] = useState('confusion_matrix');
+  const [batchIndex, setBatchIndex] = useState(0);
 
   if (!job || job.state !== 'done') return null;
 
   const vocab = job.vocab_check || {};
   const vocabStyle = VOCAB_STYLES[vocab.status];
   const plots = job.plot_urls || {};
-  const plotKeys = Object.keys(plots);
+  // val_batch* 是 ultralytics 的「標註 vs 預測」拼圖，成對才有意義，與曲線圖分開呈現
+  const plotKeys = Object.keys(plots).filter((key) => !key.startsWith('val_batch'));
+  const batchIndexes = [0, 1, 2].filter(
+    (i) => plots[`val_batch${i}_labels`] && plots[`val_batch${i}_pred`],
+  );
+  const activeBatch = batchIndexes.includes(batchIndex) ? batchIndex : batchIndexes[0];
 
   const PLOT_LABELS = {
     confusion_matrix: '混淆矩陣',
@@ -152,6 +158,50 @@ const EvalResultDetail = ({ job, onOpenPlot }) => {
               className="w-full rounded-xl border border-white/10 bg-white cursor-zoom-in"
             />
           )}
+        </div>
+      )}
+
+      {/* 標註 vs 預測拼圖 */}
+      {batchIndexes.length > 0 && (
+        <div className="glass-panel p-6 rounded-2xl border border-white/[0.06] shadow-xl space-y-3">
+          <h4 className="text-xs font-bold text-white tracking-widest uppercase">標註與預測對照</h4>
+          <p className="text-[10px] text-gray-500 leading-relaxed">
+            ultralytics 產出的縮圖拼接，僅涵蓋前 3 批、每批最多 16 張，適合快速一瞥；
+            要逐張檢查漏抓、誤報與類別錯，請改用「逐張檢視」。
+          </p>
+          {batchIndexes.length > 1 && (
+            <div className="flex flex-wrap gap-1.5">
+              {batchIndexes.map((i) => (
+                <button
+                  key={i}
+                  onClick={() => setBatchIndex(i)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                    activeBatch === i
+                      ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300'
+                      : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/25'
+                  }`}
+                >
+                  第 {i + 1} 批
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {[['labels', '標註'], ['pred', '預測']].map(([suffix, label]) => {
+              const src = plots[`val_batch${activeBatch}_${suffix}`];
+              return (
+                <figure key={suffix} className="space-y-1.5">
+                  <figcaption className="text-[10px] font-bold text-gray-400">{label}</figcaption>
+                  <img
+                    src={src}
+                    alt={`第 ${activeBatch + 1} 批${label}`}
+                    onClick={() => onOpenPlot?.(src)}
+                    className="w-full rounded-xl border border-white/10 bg-white cursor-zoom-in"
+                  />
+                </figure>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

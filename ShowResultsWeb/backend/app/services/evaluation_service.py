@@ -489,6 +489,14 @@ _PLOT_FILES = {
     "f1_curve": "BoxF1_curve.png",
     "p_curve": "BoxP_curve.png",
     "r_curve": "BoxR_curve.png",
+    # plots=True 時 ultralytics 另外產出前 3 批的「標註 vs 預測」縮圖拼接（每批最多 16 張）。
+    # 只適合快速一瞥，逐張檢查漏抓/誤報要走 review_service。
+    "val_batch0_labels": "val_batch0_labels.jpg",
+    "val_batch0_pred": "val_batch0_pred.jpg",
+    "val_batch1_labels": "val_batch1_labels.jpg",
+    "val_batch1_pred": "val_batch1_pred.jpg",
+    "val_batch2_labels": "val_batch2_labels.jpg",
+    "val_batch2_pred": "val_batch2_pred.jpg",
 }
 
 
@@ -919,6 +927,16 @@ def load_jobs_from_disk() -> None:
         payload["job_dir"] = str(entry)
         payload["log_tail"] = deque(payload.get("log_tail") or [], maxlen=LOG_TAIL_MAXLEN)
         payload["_dataset_stats"] = {}
+        # 以磁碟上的實際檔案為準重新蒐集圖表：manifest 是寫入當時的 _PLOT_FILES 快照，
+        # 之後新增的圖（例如 val_batch 拼圖）早就產出在 val/ 裡，舊 job 也應該看得到。
+        collected = _collect_plots(entry / "val")
+        if collected:
+            plot_paths = dict(payload.get("plot_paths") or {})
+            plot_paths.update(collected)
+            payload["plot_paths"] = plot_paths
+            payload["plot_urls"] = {
+                key: f"/api/evaluations/{job_id}/plot/{key}" for key in plot_paths
+            }
         with EVAL_JOBS_LOCK:
             EVAL_JOBS[job_id] = payload
 

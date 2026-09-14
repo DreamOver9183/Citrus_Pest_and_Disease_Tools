@@ -7,6 +7,7 @@
 評估完成時會把結果寫進**權重登錄簿**（見 evaluation_service._process_job），因此指標
 在 session 被刪除、甚至系統重啟之後仍然查得到。
 """
+import mimetypes
 import queue
 
 from fastapi import APIRouter
@@ -133,7 +134,8 @@ def get_evaluation_plot(job_id: str, key: str):
     path = evaluation_service.plot_path(job_id, key)
     if path is None:
         raise ApiException("not_found", "找不到指定的圖表")
-    return FileResponse(path, media_type="image/png")
+    # 曲線是 .png、val_batch 拼圖是 .jpg，型別依副檔名判斷
+    return FileResponse(path, media_type=mimetypes.guess_type(path)[0] or "application/octet-stream")
 
 
 @router.delete("/evaluations/{job_id}", response_model=ApiResponse[EvalJobPayload])
