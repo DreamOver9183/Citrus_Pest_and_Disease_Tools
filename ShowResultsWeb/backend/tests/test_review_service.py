@@ -6,6 +6,8 @@
 EXIF 轉正與縮圖，假檔會讓那些路徑完全沒被執行到。
 """
 import io
+import json
+import shutil
 import time
 import zipfile
 from pathlib import Path
@@ -232,6 +234,25 @@ def test_tflite_uses_its_fixed_size_when_none_is_requested(tmp_path, monkeypatch
     assert calls[0]["imgsz"] == 320
 
 
+def test_fixed_input_size_reads_the_metadata_appended_to_a_tflite_file(tmp_path):
+    """
+    自己讀附加在 flatbuffer 尾端的 metadata.json。ultralytics 8.4.135 已移除
+    read_tflite_metadata，依賴它會讓固定尺寸的檢查靜默失效（在 Docker 實測踩到）。
+    """
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("metadata.json", json.dumps({"imgsz": [320, 320], "end2end": True}))
+    model = tmp_path / "model.tflite"
+    model.write_bytes(b"\x1c\x00\x00\x00TFL3" + b"\x00" * 64 + buf.getvalue())
+    assert rs._fixed_input_size(str(model)) == 320
+
+    bare = tmp_path / "bare.tflite"
+    bare.write_bytes(b"\x1c\x00\x00\x00TFL3" + b"\x00" * 64)
+    assert rs._fixed_input_size(str(bare)) is None
+    assert rs._fixed_input_size(str(tmp_path / "missing.tflite")) is None
+    assert rs._fixed_input_size("/fake/best.pt") is None
+
+
 def test_session_gate(monkeypatch):
     assert rs.session_review_gate(_session())[0] is True
     assert rs.session_review_gate({**_session(), "model_arch": "ssdlite_mobilenet_v3_large"})[0] is False
@@ -292,6 +313,80 @@ def test_done_jobs_survive_restart(tmp_path, monkeypatch):
     assert restored and restored["state"] == "done"
     assert rs.query_items(job["job_id"], conf=0.25)["summary"]["tp"] == 1
     assert rs.image_path(job["job_id"], 0, "full")
+
+
+def _zip_dataset(tmp_path):
+    zip_path = tmp_path / "ds.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("test/images/a.jpg", _jpeg_bytes())
+        zf.writestr("test/labels/a.txt", LABEL_A)
+    dataset = _dataset(tmp_path)
+    dataset["source_container"] = str(zip_path)
+    return dataset
+
+
+def _reload_jobs():
+    rs.REVIEW_JOBS.clear()
+    rs._ITEMS_CACHE.clear()
+    rs.load_jobs_from_disk()
+
+
+def test_images_stay_reachable_when_the_job_directory_moves(tmp_path, monkeypatch):
+    """
+    docker-compose 把 extracted_runs 同時掛給主機與容器，同一個 job 兩邊的絕對路徑不同。
+    影像目錄存成絕對路徑的話，換一邊開就只剩縮圖、原圖 404（實際在容器裡踩到過）。
+    """
+    _stub(monkeypatch)
+    job = rs.submit_review(_session(), _zip_dataset(tmp_path), "test", None)
+    _wait_for(job["job_id"])
+    _wait_manifest(job["job_id"])
+    _wait_idle()
+
+    moved = tmp_path / "mounted_elsewhere"
+    shutil.move(str(rs.REVIEW_DIR), str(moved))
+    monkeypatch.setattr(rs, "REVIEW_DIR", moved)
+    _reload_jobs()
+
+    full = rs.image_path(job["job_id"], 0, "full")
+    assert full and Path(full).is_file()
+    assert Path(full).resolve().is_relative_to(moved.resolve())
+
+
+def test_folder_source_images_follow_the_library_location(tmp_path, monkeypatch):
+    _stub(monkeypatch)
+    library = tmp_path / "LocalLibrary"
+    monkeypatch.setattr(rs, "LOCAL_LIBRARY_DIR", library)
+    job = rs.submit_review(_session(), _dataset(library), "test", None)
+    _wait_for(job["job_id"])
+    _wait_manifest(job["job_id"])
+    _wait_idle()
+
+    remounted = tmp_path / "app_LocalLibrary"
+    shutil.move(str(library), str(remounted))
+    monkeypatch.setattr(rs, "LOCAL_LIBRARY_DIR", remounted)
+    _reload_jobs()
+
+    full = rs.image_path(job["job_id"], 0, "full")
+    assert full and Path(full).resolve().is_relative_to(remounted.resolve())
+
+
+def test_legacy_manifest_with_an_absolute_images_dir_is_relocated(tmp_path, monkeypatch):
+    """images_ref 之前的 manifest 只存絕對路徑；落在自己 job 目錄底下的要救得回來。"""
+    _stub(monkeypatch)
+    job = rs.submit_review(_session(), _zip_dataset(tmp_path), "test", None)
+    job_id = job["job_id"]
+    _wait_for(job_id)
+    manifest = _wait_manifest(job_id)
+    _wait_idle()
+
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload.pop("images_ref", None)
+    payload["images_dir"] = f"D:\\other\\machine\\reviews\\{job_id}\\data\\test\\images"
+    manifest.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    _reload_jobs()
+
+    full = rs.image_path(job_id, 0, "full")
+    assert full and Path(full).is_file()
 
 
 def test_image_path_rejects_indexes_outside_the_job(tmp_path, monkeypatch):

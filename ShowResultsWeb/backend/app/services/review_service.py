@@ -35,6 +35,7 @@ import threading
 import time
 import traceback
 import uuid
+import zipfile
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -44,6 +45,7 @@ from jinja2 import Environment, FileSystemLoader
 from PIL import Image, ImageOps
 
 from app.core.config import (
+    LOCAL_LIBRARY_DIR,
     MAX_EVAL_IMAGES,
     MAX_QUEUED_REVIEWS,
     MAX_REVIEW_JOBS,
@@ -153,14 +155,22 @@ def _predict_image(model, image: Image.Image, imgsz: Optional[int]) -> List[Dict
 
 
 def _fixed_input_size(weights: str) -> Optional[int]:
-    """TFLite 的輸入尺寸在匯出時就固定了，從檔內嵌的 metadata 讀出。非 TFLite 回 None。"""
+    """
+    TFLite 的輸入尺寸在匯出時就固定了，從檔內嵌的 metadata 讀出。非 TFLite 或讀不到時回 None。
+
+    ultralytics 把 metadata 以 zip 條目（metadata.json）附加在 flatbuffer 尾端。**自己讀，不呼叫
+    ultralytics 的內部函式**：本機 8.4.122 有 `nn.backends.base.read_tflite_metadata`，重建後的
+    Docker 映像（8.4.135）已經沒有這個名字——import 失敗被吞掉，固定尺寸的檢查整個靜默失效，
+    使用者看到的是 LiteRT 的「Dimension mismatch」而不是可讀的說明（實測踩到過）。
+    """
     if not str(weights).lower().endswith(".tflite"):
         return None
     try:
-        from ultralytics.nn.backends.base import read_tflite_metadata
-
-        metadata = read_tflite_metadata(weights) or {}
-    except Exception:  # noqa: BLE001 — metadata 讀不到時退回使用者指定的尺寸
+        with zipfile.ZipFile(weights) as zf:
+            if "metadata.json" not in zf.namelist():
+                return None
+            metadata = json.loads(zf.read("metadata.json"))
+    except (OSError, zipfile.BadZipFile, ValueError, KeyError):
         return None
     return normalize_imgsz(metadata.get("imgsz"))
 
@@ -201,6 +211,43 @@ def _write_thumbnail(image: Image.Image, dest: Path) -> None:
     thumb = image.copy()
     thumb.thumbnail((THUMB_MAX_SIDE, THUMB_MAX_SIDE))
     thumb.save(dest, "JPEG", quality=THUMB_QUALITY)
+
+
+def _portable_images_dir(images_dir: str, job_dir: Path) -> Dict[str, str]:
+    """
+    影像目錄以「相對於哪個根」的形式保存，而不是絕對路徑。
+
+    docker-compose 把 extracted_runs 同時掛給主機與容器，同一個 job 兩邊都會還原；但絕對
+    路徑兩邊不同（`D:\\...\\extracted_runs` 對 `/app/backend/extracted_runs`，LocalLibrary
+    也是）。存成絕對路徑的話，換一邊開就只剩縮圖、原圖全部 404。
+    """
+    real = Path(images_dir).resolve()
+    for base, root in (("job", Path(job_dir)), ("library", Path(LOCAL_LIBRARY_DIR))):
+        try:
+            return {"base": base, "path": real.relative_to(root.resolve()).as_posix()}
+        except ValueError:
+            continue
+    return {"base": "absolute", "path": str(real)}
+
+
+def _resolve_images_dir(job: Dict[str, Any]) -> Optional[str]:
+    ref = job.get("images_ref")
+    if ref:
+        if ref.get("base") == "job":
+            return str(Path(job["job_dir"]) / ref["path"])
+        if ref.get("base") == "library":
+            return str(Path(LOCAL_LIBRARY_DIR) / ref["path"])
+        return ref.get("path")
+
+    # 這個欄位之前寫下的 manifest 只有絕對路徑：落在自己 job 目錄底下的（ZIP 來源）還救得回來
+    legacy = job.get("images_dir")
+    if not legacy:
+        return None
+    normalized = str(legacy).replace("\\", "/")
+    marker = f"/{job.get('job_id')}/"
+    if marker in normalized:
+        return str(Path(job["job_dir"]) / normalized.split(marker, 1)[1])
+    return legacy
 
 
 # --------------------------------------------------------------------------- #
@@ -414,6 +461,7 @@ def _process_job(job_id: str) -> None:
                 finished_at=_now_iso(),
                 elapsed_seconds=round(time.monotonic() - job["_started_monotonic"], 1),
                 label_issues=issues, unreadable=unreadable, images_dir=resolved.images_dir,
+                images_ref=_portable_images_dir(resolved.images_dir, job_dir),
             )
         _write_manifest(job_id)
         finished = True
@@ -440,6 +488,7 @@ def _write_manifest(job_id: str) -> None:
         payload = _job_public(job)
         payload["schema_version"] = JOB_SCHEMA_VERSION
         payload["images_dir"] = job.get("images_dir")
+        payload["images_ref"] = job.get("images_ref")
         job_dir = Path(job["job_dir"])
     try:
         with open(job_dir / "manifest.json", "w", encoding="utf-8") as f:
@@ -539,6 +588,7 @@ def submit_review(
         "label_issues": {},
         "unreadable": [],
         "images_dir": None,
+        "images_ref": None,
         "source_weights": weights,
         "job_dir": str(REVIEW_DIR / job_id),
         "_dataset_stats": dataset,
@@ -733,7 +783,7 @@ def image_path(job_id: str, index: int, variant: str = "full") -> Optional[str]:
         if job is None or job.get("state") != "done":
             return None
         job_dir = job["job_dir"]
-        images_dir = job.get("images_dir")
+        images_dir = _resolve_images_dir(job)
     items = _load_items(job_id)
     if items is None or not (0 <= index < len(items["images"])):
         return None
