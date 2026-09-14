@@ -27,6 +27,7 @@ BINARY_ROUTES = {
     "/api/evaluations/{job_id}/plot/{key}",
     "/api/reports/{report_id}/download",
     "/api/reports/{report_id}/view",
+    "/api/reviews/{job_id}/image/{index}",
 }
 
 
@@ -144,7 +145,8 @@ def test_binary_endpoints_report_missing_files_through_the_envelope(client):
     for path in ("/api/export/exp_missing/download",
                  "/api/evaluations/eval_missing/plot/confusion_matrix",
                  "/api/reports/rep_missing/download",
-                 "/api/reports/rep_missing/view"):
+                 "/api/reports/rep_missing/view",
+                 "/api/reviews/rev_missing/image/0"):
         error(client.get(path), status_code=404, code="not_found")
 
 

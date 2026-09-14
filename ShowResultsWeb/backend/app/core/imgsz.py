@@ -28,6 +28,16 @@ def validate_imgsz(value: Optional[int]) -> Optional[int]:
     return value
 
 
+def normalize_imgsz(value: Any) -> Optional[int]:
+    """ultralytics 的 imgsz 可能是 int 或 [h, w]；統一成單一整數（取長邊），無法解讀時回 None。"""
+    if isinstance(value, (list, tuple)):
+        value = max(value) if value else None
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def model_default_imgsz(model: Any) -> Optional[int]:
     """
     ultralytics 模型在未指定 imgsz 時實際使用的尺寸。
@@ -36,10 +46,4 @@ def model_default_imgsz(model: Any) -> Optional[int]:
     imgsz/data/task/single_cls）。取不到時回 None，由畫面顯示「模型預設」而不是猜一個數字。
     """
     overrides = getattr(model, "overrides", None) or {}
-    value = overrides.get("imgsz")
-    if isinstance(value, (list, tuple)):
-        value = max(value) if value else None
-    try:
-        return int(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
+    return normalize_imgsz(overrides.get("imgsz"))

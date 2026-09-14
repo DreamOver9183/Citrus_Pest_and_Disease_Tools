@@ -168,6 +168,19 @@ def is_format_available(fmt: str) -> Tuple[bool, Optional[str]]:
     return False, f"不支援的匯出格式：{fmt}"
 
 
+def tflite_inference_available() -> Tuple[bool, Optional[str]]:
+    """
+    這台機器能不能對 .tflite 做推論（逐張檢視用）。
+
+    與匯出的閘不同：匯出需要 litert_torch 轉換器且受 ultralytics 的平台斷言限制；推論只需要
+    ultralytics LiteRT backend 會 import 的 `ai_edge_litert` runtime。該套件只列在
+    requirements-docker.txt，所以 Windows 開發環境會顯示停用並附原因。
+    """
+    if _find_spec("ai_edge_litert"):
+        return True, None
+    return False, "缺少 TFLite 推論套件 ai_edge_litert，目前只在 Docker 環境提供。"
+
+
 def format_suffix(fmt: str) -> str:
     return _FORMAT_SPECS.get(fmt, {}).get("suffix", ".bin")
 

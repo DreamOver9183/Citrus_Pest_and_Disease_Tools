@@ -85,6 +85,25 @@ def describe_availability(stats: dict) -> Tuple[bool, Optional[str]]:
     return True, None
 
 
+def target_entry(stats: dict) -> dict:
+    """
+    資料集在「選模型／資料集」表單中的形狀，驗證評估與逐張檢視共用。
+
+    不可用的資料集**仍然列出並附上原因**，比照匯出功能「顯示但停用並說明原因」的慣例——
+    把它藏起來只會讓使用者困惑於「我的資料集去哪了」。
+    """
+    available, reason = describe_availability(stats)
+    return {
+        "dataset_id": stats.get("dataset_id"),
+        "name": stats.get("zip_name") or stats.get("dataset_id"),
+        "format": stats.get("format"),
+        "available": available,
+        "reason": reason,
+        "splits": available_splits(stats) if available else [],
+        "default_split": preferred_split(stats) if available else None,
+    }
+
+
 def _dir_split(container: str, inner_prefix: str, split: str) -> ResolvedSplit:
     """資料夾來源：就地引用，一個位元組都不複製。"""
     parts = [p for p in (inner_prefix or "").split("/") if p]

@@ -35,6 +35,9 @@ def _resolve_paths():
     # 驗證評估的工作目錄：每個 job 一個子資料夾，內含 ultralytics 產出的圖表，
     # 以及（ZIP 來源時）該 split 的選擇性解壓內容。
     EVAL_DIR = EXTRACTED_RUNS_DIR / "evaluations"
+    # 逐張檢視的工作目錄：每個 job 一個子資料夾，內含 items.json（標註框與預測框）、
+    # 縮圖，以及（ZIP 來源時）供檢視用而保留的 split 影像。
+    REVIEW_DIR = EXTRACTED_RUNS_DIR / "reviews"
 
     return {
         "PROJECT_ROOT": PROJECT_ROOT,
@@ -48,6 +51,7 @@ def _resolve_paths():
         "LOCAL_LIBRARY_DIR": LOCAL_LIBRARY_DIR,
         "LOCAL_LIBRARY_EXTRACT_DIR": LOCAL_LIBRARY_EXTRACT_DIR,
         "EVAL_DIR": EVAL_DIR,
+        "REVIEW_DIR": REVIEW_DIR,
     }
 
 
@@ -64,6 +68,7 @@ EXPORTS_DIR = _PATHS["EXPORTS_DIR"]
 LOCAL_LIBRARY_DIR = _PATHS["LOCAL_LIBRARY_DIR"]
 LOCAL_LIBRARY_EXTRACT_DIR = _PATHS["LOCAL_LIBRARY_EXTRACT_DIR"]
 EVAL_DIR = _PATHS["EVAL_DIR"]
+REVIEW_DIR = _PATHS["REVIEW_DIR"]
 
 # 上傳檔案暫存目錄（絕對路徑，不受啟動時 cwd 影響）
 UPLOAD_TEMP_DIR = Path(os.environ.get("UPLOAD_TEMP_DIR", BACKEND_DIR / "temp")).resolve()
@@ -121,6 +126,12 @@ EVAL_JOB_TTL_HOURS = int(os.environ.get("EVAL_JOB_TTL_HOURS", "24"))
 # 單次評估最多解壓的影像數，擋下誤選超大 split 的情況
 MAX_EVAL_IMAGES = int(os.environ.get("MAX_EVAL_IMAGES", "20000"))
 
+# --- 逐張檢視 ---
+# 每個 job 會保留縮圖（ZIP 來源另保留整個 split 的影像），磁碟佔用比評估大，上限設得較小。
+MAX_REVIEW_JOBS = int(os.environ.get("MAX_REVIEW_JOBS", "10"))
+MAX_QUEUED_REVIEWS = int(os.environ.get("MAX_QUEUED_REVIEWS", "3"))
+REVIEW_JOB_TTL_HOURS = int(os.environ.get("REVIEW_JOB_TTL_HOURS", "24"))
+
 # CORS 允許的前端來源（逗號分隔）。Docker 單容器部署下前後端同源，此設定主要用於本機開發
 # （Vite dev server 預設在 5173 port）。
 CORS_ALLOWED_ORIGINS = [
@@ -133,7 +144,7 @@ CORS_ALLOWED_ORIGINS = [
 def ensure_dirs():
     """Create standard directories if missing (idempotent)."""
     for p in [EXTRACTED_RUNS_DIR, TEMP_DIR, REPORTS_DIR, SAMPLES_DIR, IMAGES_DIR, UPLOAD_TEMP_DIR, EXPORTS_DIR,
-              LOCAL_LIBRARY_DIR, LOCAL_LIBRARY_EXTRACT_DIR, EVAL_DIR]:
+              LOCAL_LIBRARY_DIR, LOCAL_LIBRARY_EXTRACT_DIR, EVAL_DIR, REVIEW_DIR]:
         try:
             p.mkdir(parents=True, exist_ok=True)
         except Exception:
@@ -152,6 +163,7 @@ __all__ = [
     "LOCAL_LIBRARY_DIR",
     "LOCAL_LIBRARY_EXTRACT_DIR",
     "EVAL_DIR",
+    "REVIEW_DIR",
     "UPLOAD_TEMP_DIR",
     "MAX_SESSIONS",
     "DATABASE_URL",
@@ -171,6 +183,9 @@ __all__ = [
     "MAX_QUEUED_EVALS",
     "EVAL_JOB_TTL_HOURS",
     "MAX_EVAL_IMAGES",
+    "MAX_REVIEW_JOBS",
+    "MAX_QUEUED_REVIEWS",
+    "REVIEW_JOB_TTL_HOURS",
     "CORS_ALLOWED_ORIGINS",
     "ensure_dirs",
 ]

@@ -423,6 +423,8 @@ class EvalTargetSession(BaseModel):
     epochs: Optional[Any] = None
     available: bool = False
     reason: Optional[str] = None
+    # 權重副檔名（pt / tflite …）。逐張檢視用它鎖定 TFLite 的固定輸入尺寸；評估不填
+    weight_format: Optional[str] = None
 
 
 class EvalTargetsPayload(BaseModel):
@@ -443,6 +445,118 @@ class EvalJobPayload(BaseModel):
 
 class EvalJobsPayload(BaseModel):
     jobs: List[EvalJobOut] = []
+
+
+# --- 逐張檢視 ---------------------------------------------------------------
+
+class ReviewJobOut(BaseModel):
+    job_id: str
+    session_id: Optional[str] = None
+    session_name: Optional[str] = None
+    weight_format: Optional[str] = None
+    weight_sha256: Optional[str] = None
+    dataset_id: Optional[str] = None
+    dataset_name: Optional[str] = None
+    split: Optional[str] = None
+    # 影像檔名清單的雜湊。dataset_id 每次掃描 LocalLibrary 都會重新產生，
+    # 「這兩次檢視能不能逐張並排」要看的是同一批影像，而不是同一個 id。
+    image_set_key: Optional[str] = None
+    imgsz_requested: Optional[int] = None
+    imgsz_used: Optional[int] = None
+    state: str
+    stage: str
+    stage_label: str
+    progress: int = 0
+    processed: int = 0
+    image_count: Optional[int] = None
+    message: Optional[str] = None
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    elapsed_seconds: Optional[float] = None
+    vocab_check: Optional[EvalVocabCheck] = None
+    class_names: List[str] = []
+    label_issues: Dict[str, int] = {}
+    unreadable: List[str] = []
+    store_conf: float = 0.0
+    iou_threshold: float = 0.0
+
+    model_config = {"extra": "allow"}
+
+
+class ReviewJobPayload(BaseModel):
+    job: Optional[ReviewJobOut] = None
+    message: Optional[str] = None
+
+
+class ReviewJobsPayload(BaseModel):
+    jobs: List[ReviewJobOut] = []
+
+
+class ReviewTargetsPayload(BaseModel):
+    datasets: List[EvalTargetDataset] = []
+    sessions: List[EvalTargetSession] = []
+    imgsz_choices: List[int] = []
+
+
+class ReviewSubmitRequest(BaseModel):
+    session_id: str
+    dataset_id: str
+    split: Optional[str] = None
+    # None = 沿用模型預設（.pt 為訓練尺寸；.tflite 為匯出時固定的尺寸）
+    imgsz: Optional[int] = None
+
+
+class ReviewBox(BaseModel):
+    """一個框與它的配對結果。id/pair 是原清單索引，前端據此把類別錯的一對連起來。"""
+    id: int
+    cls: int
+    box: List[float]
+    status: str
+    pair: Optional[int] = None
+    conf: Optional[float] = None
+    iou: Optional[float] = None
+
+
+class ReviewItemOut(BaseModel):
+    index: int
+    name: str
+    width: int
+    height: int
+    thumb_url: str
+    image_url: str
+    gt: List[ReviewBox] = []
+    preds: List[ReviewBox] = []
+    counts: Dict[str, int] = {}
+    errors: int = 0
+    label_missing: bool = False
+
+
+class ReviewSummary(BaseModel):
+    """逐張計數（非評估指標）。"""
+    images: int = 0
+    clean: int = 0
+    with_fn: int = 0
+    with_fp: int = 0
+    with_wrong: int = 0
+    tp: int = 0
+    fp: int = 0
+    fn: int = 0
+    wrong: int = 0
+
+
+class ReviewItemsPayload(BaseModel):
+    items: List[ReviewItemOut] = []
+    total: int = 0
+    offset: int = 0
+    limit: int = 0
+    conf: float = 0.0
+    summary: ReviewSummary = ReviewSummary()
+    class_names: List[str] = []
+
+
+class ReviewItemPayload(BaseModel):
+    item: Optional[ReviewItemOut] = None
 
 
 # --- 報告匯出 ---------------------------------------------------------------

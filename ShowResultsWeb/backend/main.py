@@ -19,11 +19,13 @@ from app.routers import (
     metrics,
     registry,
     reports,
+    reviews,
     sessions,
 )
 from app.services.dataset_manager import load_datasets_from_disk
 from app.services.evaluation_service import load_jobs_from_disk as load_eval_jobs_from_disk
 from app.services.export_service import load_export_jobs_from_disk
+from app.services.review_service import load_jobs_from_disk as load_review_jobs_from_disk
 from app.services.session_manager import (
     ACTIVE_SESSIONS,
     cleanup_legacy_runs,
@@ -58,6 +60,8 @@ async def lifespan(_app: FastAPI):
     # 而本專案多數 session 來自不落地的 LocalLibrary，過濾等於每次重啟刪光。
     # 必須排在 init_db() 之後：還原時會順便把尚未入帳的結果補寫進登錄簿。
     load_eval_jobs_from_disk()
+    # 逐張檢視同理不過濾來源 session；它不寫登錄簿，順序上沒有相依
+    load_review_jobs_from_disk()
 
     yield
 
@@ -91,6 +95,7 @@ app.include_router(exports.router, prefix="/api")
 app.include_router(local_library.router, prefix="/api")
 app.include_router(evaluations.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
+app.include_router(reviews.router, prefix="/api")
 app.include_router(registry.router, prefix="/api")
 
 # 掛載靜態推論/指標圖片暫存目錄

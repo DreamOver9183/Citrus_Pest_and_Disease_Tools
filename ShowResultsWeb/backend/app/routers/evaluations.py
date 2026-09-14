@@ -26,6 +26,7 @@ from app.services.dataset_resolver import (
     available_splits,
     describe_availability,
     preferred_split,
+    target_entry,
 )
 from app.services.session_manager import ACTIVE_SESSIONS, SESSIONS_LOCK
 
@@ -46,18 +47,7 @@ def list_targets():
     with SESSIONS_LOCK:
         sessions_snapshot = list(ACTIVE_SESSIONS.values())
 
-    datasets = []
-    for stats in datasets_snapshot:
-        available, reason = describe_availability(stats)
-        datasets.append({
-            "dataset_id": stats.get("dataset_id"),
-            "name": stats.get("zip_name") or stats.get("dataset_id"),
-            "format": stats.get("format"),
-            "available": available,
-            "reason": reason,
-            "splits": available_splits(stats) if available else [],
-            "default_split": preferred_split(stats) if available else None,
-        })
+    datasets = [target_entry(stats) for stats in datasets_snapshot]
 
     sessions = []
     for s in sessions_snapshot:
