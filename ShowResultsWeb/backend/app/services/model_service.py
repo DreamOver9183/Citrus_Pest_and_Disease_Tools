@@ -9,6 +9,9 @@ from torchvision.transforms import v2
 from app.utils.device_probe import get_recommended_device, probe_all_devices
 from app.core.config import TEMP_DIR
 
+# SSDLite 的輸入尺寸寫死在模型結構與 predict_ssd 的 Resize 裡，imgsz 參數對它無效
+SSD_INPUT_SIZE = 320
+
 SSD_CLASS_NAMES = {
     1: "H_MC", 2: "H_PK", 3: "D_GS", 4: "D_MN", 5: "D_SM", 6: "D_CK",
     7: "P_AP", 8: "P_AP_LD", 9: "P_SI", 10: "P_TP", 11: "P_TP_LD", 12: "P_LM_LD"
@@ -118,13 +121,17 @@ class ModelManager:
             self.model_arch = arch
             return self.current_model
 
-    def predict(self, image_path, conf=0.25):
+    def predict(self, image_path, conf=0.25, imgsz=None):
         with self._lock:
             if self.current_model is None:
                 raise RuntimeError("No model is currently loaded.")
-                
+
             if self.model_arch == "yolo":
-                return self.current_model.predict(image_path, conf=conf, verbose=False)
+                # imgsz 為 None 時不傳，讓 ultralytics 沿用模型預設（.pt 為訓練尺寸）
+                kwargs = {"conf": conf, "verbose": False}
+                if imgsz is not None:
+                    kwargs["imgsz"] = imgsz
+                return self.current_model.predict(image_path, **kwargs)
             else:
                 return self.predict_ssd(image_path, conf)
 

@@ -16,6 +16,8 @@ const ControlPanel = ({
   confThreshold,
   setConfThreshold,
   onConfCommit,
+  imgsz,
+  onImgszChange,
   uploadedFilesCount,
   onResample,
   resultsCount,
@@ -118,6 +120,23 @@ const ControlPanel = ({
             onTouchEnd={() => onConfCommit(confThreshold)}
             className="w-full accent-orange-500 h-1 bg-white/10 rounded-lg cursor-pointer"
           />
+        </div>
+
+        {/* 推論解析度 */}
+        <div className="space-y-2">
+          <label className="text-[11px] text-gray-400 font-bold tracking-wider uppercase block">5. 推論解析度</label>
+          <select
+            value={imgsz}
+            onChange={(e) => onImgszChange(e.target.value)}
+            className="w-full bg-[#060b1e]/90 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-orange-500 transition-colors cursor-pointer font-sans font-semibold"
+          >
+            <option value="">模型預設（訓練尺寸）</option>
+            <option value="320">320</option>
+            <option value="416">416</option>
+            <option value="512">512</option>
+            <option value="640">640</option>
+          </select>
+          <p className="text-[9px] text-gray-500 font-sans">SSDLite 固定 320，不受此設定影響。</p>
         </div>
 
         {/* 按鈕組 */}

@@ -28,6 +28,8 @@ const LiveDemo = () => {
     setSelectedSessionId,
     confThreshold,
     setConfThreshold,
+    imgsz,
+    changeImgsz,
     sampleSize,
     setSampleSize,
     results,
@@ -127,6 +129,8 @@ const LiveDemo = () => {
           confThreshold={confThreshold}
           setConfThreshold={setConfThreshold}
           onConfCommit={reRunInferenceWithNewConf}
+          imgsz={imgsz}
+          onImgszChange={changeImgsz}
           uploadedFilesCount={uploadedFiles.length}
           onResample={handleResample}
           resultsCount={results.length}

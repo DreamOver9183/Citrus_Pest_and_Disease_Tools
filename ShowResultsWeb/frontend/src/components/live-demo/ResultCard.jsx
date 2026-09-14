@@ -129,11 +129,18 @@ const ResultCard = ({ item, resultsCount, modelCustomName, onToggleOriginal, onZ
         <div className="bg-slate-950/40 rounded-xl p-3 border border-white/5 flex flex-col gap-2 text-left text-[10px] font-mono">
           <div className="text-gray-400 flex items-center justify-between border-b border-white/5 pb-1.5">
             <span>檢出: <span className="text-orange-400 font-extrabold">{item.counts} 個病徵特徵</span></span>
-            {item.deviceUsed && (
-              <span className="text-[8px] uppercase tracking-wider font-extrabold bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded border border-orange-500/20" title="推論裝置">
-                ENGINE: {item.deviceUsed.includes('cuda') ? 'GPU' : item.deviceUsed.includes('MPS') ? 'MPS' : 'CPU'}
-              </span>
-            )}
+            <span className="flex items-center gap-1.5">
+              {item.imgszUsed && (
+                <span className="text-[8px] tracking-wider font-extrabold bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded border border-orange-500/20" title="推論解析度">
+                  解析度 {item.imgszUsed}
+                </span>
+              )}
+              {item.deviceUsed && (
+                <span className="text-[8px] uppercase tracking-wider font-extrabold bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded border border-orange-500/20" title="推論裝置">
+                  ENGINE: {item.deviceUsed.includes('cuda') ? 'GPU' : item.deviceUsed.includes('MPS') ? 'MPS' : 'CPU'}
+                </span>
+              )}
+            </span>
           </div>
           {item.counts > 0 ? (
             <div className="flex flex-wrap gap-1.5 pt-0.5">

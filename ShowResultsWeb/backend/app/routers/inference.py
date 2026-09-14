@@ -7,14 +7,16 @@ multipart（要傳影像位元組），把參數留在 query 等於同一個請�
 import os
 import shutil
 import uuid
+from typing import Optional
 
 from fastapi import APIRouter, File, Form, UploadFile
 
 from app.core.config import EXTRACTED_RUNS_DIR, TEMP_DIR, UPLOAD_TEMP_DIR
 from app.core.envelope import ApiException, ApiResponse, ok
+from app.core.imgsz import model_default_imgsz, validate_imgsz
 from app.schemas import InferencePayload
 from app.services.device_service import device_service
-from app.services.model_service import model_manager
+from app.services.model_service import SSD_INPUT_SIZE, model_manager
 from app.services.session_manager import ACTIVE_SESSIONS, SESSIONS_LOCK
 
 router = APIRouter()
@@ -25,8 +27,15 @@ def run_inference(
     file: UploadFile = File(...),
     session_id: str = Form(...),
     conf: float = Form(0.25),
+    imgsz: Optional[int] = Form(None),
 ):
-    """執行離線推論。使用同步 def 確保在 FastAPI 的 threadpool 上執行。"""
+    """執行離線推論。使用同步 def 確保在 FastAPI 的 threadpool 上執行。
+
+    `imgsz` 不填時沿用模型預設（`.pt` 為訓練尺寸）；回應的 `imgsz_used` 標明實際用了多少，
+    SSDLite 固定 320、不受此參數影響。
+    """
+    imgsz = validate_imgsz(imgsz)
+
     with SESSIONS_LOCK:
         model_data = ACTIVE_SESSIONS.get(session_id)
         model_data = dict(model_data) if model_data else None
@@ -58,7 +67,7 @@ def run_inference(
         print(f"[FastAPI] Error copying persistent image: {exc}")
 
     try:
-        results = model_manager.predict(temp_infer_file, conf=conf)
+        results = model_manager.predict(temp_infer_file, conf=conf, imgsz=imgsz)
 
         output_filename = f"pred_{uuid.uuid4().hex}_{file.filename}"
         output_path = os.path.join(TEMP_DIR, output_filename)
@@ -68,12 +77,14 @@ def run_inference(
 
         if hasattr(results[0], "json_data"):
             # SSD 的模擬結果物件：影像已由 model_service 寫在 save_path，搬到我們的落點
+            imgsz_used = SSD_INPUT_SIZE
             shutil.move(results[0].save_path, output_path)
             for item in results[0].json_data:
                 cls_name = item["name"]
                 counts[cls_name] = counts.get(cls_name, 0) + 1
                 total_counts += 1
         else:
+            imgsz_used = imgsz or model_default_imgsz(model_manager.current_model)
             results[0].save(filename=output_path)
             class_names = model_manager.current_model.names
             if results[0].boxes is not None:
@@ -89,6 +100,7 @@ def run_inference(
             "counts": total_counts,
             "detections": counts,
             "device_used": model_manager.get_current_device_label(),
+            "imgsz_used": imgsz_used,
         })
     except ApiException:
         raise

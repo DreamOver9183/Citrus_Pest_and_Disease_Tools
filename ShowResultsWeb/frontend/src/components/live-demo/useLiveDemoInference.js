@@ -12,6 +12,8 @@ export const useLiveDemoInference = () => {
 
   const [selectedSessionId, setSelectedSessionId] = useState('');
   const [confThreshold, setConfThreshold] = useState(0.25);
+  // '' = 沿用模型預設（.pt 為訓練尺寸）；App 即時辨識用 320，要比對就得明確指定
+  const [imgsz, setImgsz] = useState('');
   const [sampleSize, setSampleSize] = useState('4');
   const [activeLightboxUrl, setActiveLightboxUrl] = useState(null);
 
@@ -35,7 +37,7 @@ export const useLiveDemoInference = () => {
     }
   }, [sessions, selectedSessionId, sessionIds]);
 
-  const runSingleInference = async (index, sessionId, file, confVal, signal) => {
+  const runSingleInference = async (index, sessionId, file, confVal, signal, imgszVal) => {
     try {
       // session_id 與 conf 改成 multipart 表單欄位（原本在 query string）：
       // 這個端點本來就必須是 multipart，把參數留在 query 等於同一個請求有兩套
@@ -44,6 +46,7 @@ export const useLiveDemoInference = () => {
       formData.append('file', file);
       formData.append('session_id', sessionId);
       formData.append('conf', confVal);
+      if (imgszVal) formData.append('imgsz', imgszVal);
       const data = await apiUpload('/inference', formData, { signal });
 
       setResults(prev => prev.map((item, idx) => idx === index ? {
@@ -53,7 +56,8 @@ export const useLiveDemoInference = () => {
         originalUrl: data.original_url || item.originalUrl,
         counts: data.counts,
         detections: data.detections,
-        deviceUsed: data.device_used
+        deviceUsed: data.device_used,
+        imgszUsed: data.imgsz_used
       } : item));
     } catch (err) {
       if (axios.isCancel(err)) return; // 被 AbortController 取消的請求，靜默忽略
@@ -87,7 +91,7 @@ export const useLiveDemoInference = () => {
   const dispatchInference = (filesToProcess, newItems, signal) => {
     newItems.forEach((item, idx) => {
       const file = filesToProcess[idx];
-      runSingleInference(idx, selectedSessionId, file, confThreshold, signal);
+      runSingleInference(idx, selectedSessionId, file, confThreshold, signal, imgsz);
     });
   };
 
@@ -112,7 +116,7 @@ export const useLiveDemoInference = () => {
     setResults(newItems);
 
     dispatchInference(filesToProcess, newItems, abortControllerRef.current.signal);
-  }, [selectedSessionId, isUnzipped, sampleSize, confThreshold]);
+  }, [selectedSessionId, isUnzipped, sampleSize, confThreshold, imgsz]);
 
   // 重新抽取圖片 (利用已儲存的原始上傳檔案)
   const handleResample = () => {
@@ -172,8 +176,8 @@ export const useLiveDemoInference = () => {
     } : item));
   };
 
-  // 動態調整信心閾值重新推論
-  const reRunInferenceWithNewConf = (newConf) => {
+  // 動態調整信心閾值／解析度重新推論
+  const reRunInferenceWithNewConf = (newConf, newImgsz = imgsz) => {
     if (results.length === 0 || !selectedSessionId) return;
 
     if (abortControllerRef.current) {
@@ -191,9 +195,14 @@ export const useLiveDemoInference = () => {
 
     results.forEach((item, idx) => {
       if (item.fileObject) {
-        runSingleInference(idx, selectedSessionId, item.fileObject, newConf, signal);
+        runSingleInference(idx, selectedSessionId, item.fileObject, newConf, signal, newImgsz);
       }
     });
+  };
+
+  const changeImgsz = (value) => {
+    setImgsz(value);
+    reRunInferenceWithNewConf(confThreshold, value);
   };
 
   return {
@@ -205,6 +214,8 @@ export const useLiveDemoInference = () => {
     setSelectedSessionId,
     confThreshold,
     setConfThreshold,
+    imgsz,
+    changeImgsz,
     sampleSize,
     setSampleSize,
     results,

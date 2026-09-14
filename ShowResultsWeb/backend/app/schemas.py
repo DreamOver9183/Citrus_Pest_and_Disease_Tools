@@ -96,6 +96,8 @@ class InferencePayload(BaseModel):
     counts: int
     detections: Dict[str, int] = {}
     device_used: str
+    # 實際使用的推論解析度；None 表示模型預設且無法從模型得知
+    imgsz_used: Optional[int] = None
 
 
 class MetricsPayload(BaseModel):
