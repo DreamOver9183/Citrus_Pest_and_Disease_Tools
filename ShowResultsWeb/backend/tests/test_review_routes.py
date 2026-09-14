@@ -164,6 +164,29 @@ def test_image_route_serves_thumbnails_and_rejects_unknown_indexes(client, tmp_p
     error(client.get(f"/api/reviews/{job['job_id']}/image/99"), status_code=404, code="not_found")
 
 
+def test_export_is_a_self_contained_html_attachment(client, tmp_path, monkeypatch):
+    job = _done_job(client, tmp_path, monkeypatch)
+    res = client.get(
+        f"/api/reviews/{job['job_id']}/export",
+        params={"status": "all", "title": "<script>alert(1)</script>"},
+    )
+    assert res.status_code == 200
+    assert "attachment" in res.headers["content-disposition"]
+
+    html = res.text
+    assert "data:image/jpeg;base64," in html, "影像必須內嵌，離線才打得開"
+    assert 'src="http' not in html and 'href="http' not in html
+    assert "逐張計數（非評估指標）" in html
+    assert "錯判：Aphid→Canker" in html
+    assert "<script>alert(1)</script>" not in html, "標題來自使用者輸入，必須跳脫"
+
+
+def test_export_rejects_limits_above_the_cap(client, tmp_path, monkeypatch):
+    job = _done_job(client, tmp_path, monkeypatch)
+    res = client.get(f"/api/reviews/{job['job_id']}/export", params={"limit": 5000})
+    error(res, status_code=400, code="validation_error")
+
+
 def test_delete_review(client, tmp_path, monkeypatch):
     job = _done_job(client, tmp_path, monkeypatch)
     data(client.delete(f"/api/reviews/{job['job_id']}"))

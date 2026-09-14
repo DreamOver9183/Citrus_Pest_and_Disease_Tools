@@ -9,9 +9,10 @@ import mimetypes
 import queue
 from pathlib import Path
 from typing import List, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from app.core.envelope import ApiException, ApiResponse, ok
 from app.core.imgsz import IMGSZ_CHOICES, validate_imgsz
@@ -180,6 +181,35 @@ def get_review_image(job_id: str, index: int, variant: str = "full"):
     if path is None:
         raise ApiException("not_found", "找不到指定的影像")
     return FileResponse(path, media_type=mimetypes.guess_type(path)[0] or "application/octet-stream")
+
+
+@router.get("/reviews/{job_id}/export")
+def export_review(
+    job_id: str,
+    conf: float = Query(0.25, ge=review_service.STORE_CONF, le=1.0),
+    classes: Optional[str] = None,
+    status: str = "errors",
+    sort: str = "errors",
+    limit: int = Query(review_service.EXPORT_LIMIT_DEFAULT, ge=1, le=review_service.EXPORT_LIMIT_MAX),
+    title: Optional[str] = None,
+):
+    """以目前的篩選條件下載一份自足 HTML（影像與框全部內嵌，離線可開、可列印成 PDF）。"""
+    if status not in review_service.STATUS_FILTERS:
+        raise ApiException("validation_error", f"status 必須是 {'、'.join(review_service.STATUS_FILTERS)} 之一")
+    if sort not in review_service.SORT_KEYS:
+        raise ApiException("validation_error", f"sort 必須是 {'、'.join(review_service.SORT_KEYS)} 之一")
+    _require_done(job_id)
+
+    rendered = review_service.render_export(
+        job_id, conf, _parse_classes(classes), status, sort, limit, title
+    )
+    if rendered is None:
+        raise ApiException("not_found", "找不到逐張檢視的結果檔")
+    html, filename = rendered
+    # 中文檔名走 RFC 5987（與 FileResponse 的處理方式相同），另給一個 ASCII 後備
+    disposition = f"attachment; filename=\"review.html\"; filename*=utf-8''{quote(filename)}"
+    return Response(content=html, media_type="text/html; charset=utf-8",
+                    headers={"Content-Disposition": disposition})
 
 
 @router.delete("/reviews/{job_id}", response_model=ApiResponse[ReviewJobPayload])

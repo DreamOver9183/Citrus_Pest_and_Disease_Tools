@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fff; color: #1d1f2b;
+         font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif; }
+  main { max-width: 1120px; margin: 0 auto; padding: 32px 24px 64px; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 6px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 28px 0 10px; }
+  .muted { color: #6b6e7e; font-size: 13px; margin: 0; }
+  table.params { border-collapse: collapse; margin: 18px 0; font-size: 13px; }
+  table.params th { text-align: left; font-weight: 500; color: #6b6e7e; padding: 4px 18px 4px 0;
+                    vertical-align: top; white-space: nowrap; }
+  table.params td { padding: 4px 0; word-break: break-all; }
+  .notice { border: 1px solid #e2c48a; background: #fdf6e6; padding: 10px 14px; border-radius: 6px;
+            font-size: 13px; line-height: 1.7; margin: 0; }
+  .stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 12px 0 4px; }
+  .stat { border: 1px solid #e3e4ea; border-radius: 6px; padding: 8px 10px; }
+  .stat span { display: block; font-size: 12px; color: #6b6e7e; }
+  .stat b { display: block; font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; margin: 14px 0 22px; align-items: center; }
+  .legend svg { vertical-align: middle; margin-right: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+  figure { margin: 0; break-inside: avoid; page-break-inside: avoid; }
+  figure svg { width: 100%; height: auto; display: block; background: #ececf0; border-radius: 4px; }
+  figcaption { font-size: 12px; margin-top: 6px; display: flex; justify-content: space-between;
+               gap: 8px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+  .c-fn { color: {{ colors.fn }}; } .c-fp { color: {{ colors.fp }}; } .c-wrong { color: {{ colors.wrong }}; }
+  @media (max-width: 720px) {
+    .grid { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media print {
+    main { padding: 0; max-width: none; }
+    .grid { gap: 12px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>{{ title }}</h1>
+  <p class="muted">產生時間 {{ env.generated_at }} · ultralytics {{ env.ultralytics or '—' }} · torch {{ env.torch or '—' }}</p>
+
+  <table class="params">
+    <tr><th>模型</th><td>{{ job.session_name }}{% if job.weight_format %}（{{ job.weight_format | upper }}）{% endif %}</td></tr>
+    <tr><th>權重 SHA-256</th><td>{{ job.weight_sha256 or '—' }}</td></tr>
+    <tr><th>資料集</th><td>{{ job.dataset_name }} / {{ job.split }}（{{ job.image_count }} 張）</td></tr>
+    <tr><th>推論解析度</th><td>{{ job.imgsz_used or '模型預設' }}</td></tr>
+    <tr><th>配對規則</th><td>信心 ≥ {{ '%.2f' | format(conf) }}；與同類別標註 IoU ≥ {{ iou }} 為正確，與其他類別標註 IoU ≥ {{ iou }} 為類別錯</td></tr>
+    <tr><th>篩選</th><td>狀態：{{ status_label }}{% if class_filter %}；類別：{{ class_filter | join('、') }}{% endif %}</td></tr>
+    <tr><th>收錄</th><td>{{ figures | length }} 張（符合條件共 {{ total }} 張{% if figures | length < total %}，依排序取前 {{ figures | length }} 張{% endif %}）</td></tr>
+  </table>
+
+  <p class="notice">
+    <strong>逐張計數（非評估指標）。</strong>以下數字只用於找出有漏抓、誤報與類別錯的影像，
+    是逐張貪婪配對的計數，<strong>不是 mAP、Precision 或 Recall</strong>，也不能與驗證評估的數字直接比較。
+  </p>
+
+  <h2>計數</h2>
+  <div class="stats">
+    <div class="stat"><span>影像</span><b>{{ summary.images }}</b></div>
+    <div class="stat"><span>全對</span><b>{{ summary.clean }}</b></div>
+    <div class="stat"><span>正確框</span><b>{{ summary.tp }}</b></div>
+    <div class="stat"><span>漏抓框</span><b>{{ summary.fn }}</b></div>
+    <div class="stat"><span>誤報框</span><b>{{ summary.fp }}</b></div>
+    <div class="stat"><span>類別錯框</span><b>{{ summary.wrong }}</b></div>
+  </div>
+  <p class="muted">計數涵蓋類別篩選後的全部影像，不受狀態篩選與收錄張數影響。</p>
+
+  <div class="legend">
+    <span><svg width="26" height="10" aria-hidden="true"><line x1="1" y1="5" x2="25" y2="5" stroke="{{ colors.tp }}" stroke-width="2"/></svg>正確（預測）</span>
+    <span><svg width="26" height="10" aria-hidden="true"><line x1="1" y1="5" x2="25" y2="5" stroke="{{ colors.fp }}" stroke-width="2"/></svg>誤報（預測）</span>
+    <span><svg width="26" height="10" aria-hidden="true"><line x1="1" y1="5" x2="25" y2="5" stroke="{{ colors.wrong }}" stroke-width="2"/></svg>類別錯（預測）</span>
+    <span><svg width="26" height="10" aria-hidden="true"><line x1="1" y1="5" x2="25" y2="5" stroke="{{ colors.fn }}" stroke-width="2" stroke-dasharray="6 4"/></svg>漏抓（標註）</span>
+    <span class="muted">實線為預測、虛線為標註</span>
+  </div>
+
+  <div class="grid">
+  {% for f in figures %}
+    <figure>
+      <svg viewBox="0 0 {{ f.width }} {{ f.height }}" role="img" aria-label="{{ f.name }}">
+        {% if f.uri %}<image href="{{ f.uri }}" x="0" y="0" width="{{ f.width }}" height="{{ f.height }}" preserveAspectRatio="none"/>{% endif %}
+        {% for s in f.shapes %}
+        <rect x="{{ s.x }}" y="{{ s.y }}" width="{{ s.w }}" height="{{ s.h }}" fill="none" stroke="{{ s.color }}" stroke-width="2" vector-effect="non-scaling-stroke"{% if s.dashed %} stroke-dasharray="6 4"{% endif %}/>
+        {% endfor %}
+        {% for s in f.shapes if s.label %}
+        <rect x="{{ s.label.x }}" y="{{ s.label.y }}" width="{{ s.label.w }}" height="{{ s.label.h }}" fill="{{ s.color }}"/>
+        <text x="{{ s.label.tx }}" y="{{ s.label.ty }}" font-size="{{ f.font }}" fill="#161826">{{ s.label.text }}</text>
+        {% endfor %}
+      </svg>
+      <figcaption>
+        <span>{{ f.name }}{% if f.label_missing %}（無標註檔）{% endif %}</span>
+        <span>正確 {{ f.counts.tp }} · <span class="c-fn">漏 {{ f.counts.fn }}</span> · <span class="c-fp">誤 {{ f.counts.fp }}</span> · <span class="c-wrong">錯 {{ f.counts.wrong }}</span></span>
+      </figcaption>
+    </figure>
+  {% endfor %}
+  </div>
+</main>
+</body>
+</html>

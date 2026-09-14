@@ -23,8 +23,10 @@
 併發模型與 evaluation_service 一致：單一 daemon 執行緒 + 有界 queue.Queue。與評估不同的
 是推論逐張進行，所以**刪除執行中的 job 會在下一張之前中止**。
 """
+import base64
 import gc
 import hashlib
+import io
 import json
 import os
 import queue
@@ -38,6 +40,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from jinja2 import Environment, FileSystemLoader
 from PIL import Image, ImageOps
 
 from app.core.config import (
@@ -48,7 +51,7 @@ from app.core.config import (
     REVIEW_JOB_TTL_HOURS,
 )
 from app.core.imgsz import model_default_imgsz, normalize_imgsz
-from app.services import export_capabilities, registry_service
+from app.services import export_capabilities, registry_service, report_service
 from app.services.dataset_resolver import DatasetUnavailable, ResolvedSplit, resolve_split
 from app.services.evaluation_service import compare_vocabularies
 from app.services.review_boxes import IOU_THRESHOLD, annotate, parse_yolo_labels
@@ -749,3 +752,147 @@ def image_path(job_id: str, index: int, variant: str = "full") -> Optional[str]:
     except ValueError:
         return None
     return target_real if os.path.isfile(target_real) else None
+
+
+# --------------------------------------------------------------------------- #
+# 自足 HTML 匯出
+# --------------------------------------------------------------------------- #
+
+# 與 frontend/src/components/review/reviewStyles.js 的 BOX_STYLES 一一對應。匯出檔離開這台
+# 機器就沒有 Nocturne 的 CSS 變數可用，所以這裡放的是 nocturne-tokens.css 裡的實際色值。
+EXPORT_COLORS = {
+    "tp": "#60ad64",     # --color-success-500
+    "fp": "#dd7769",     # --color-danger-500
+    "fn": "#c78b28",     # --color-warning-500
+    "wrong": "#1aaac4",  # --color-cat-12-500
+}
+EXPORT_MAX_SIDE = 640
+EXPORT_QUALITY = 75
+EXPORT_LIMIT_DEFAULT = 100
+# 每張約 50 KB；上限讓一份報告維持在寄得出去的大小
+EXPORT_LIMIT_MAX = 300
+
+STATUS_LABELS = {
+    "all": "全部", "errors": "有錯誤", "clean": "全對",
+    "fn": "有漏抓", "fp": "有誤報", "wrong": "有類別錯",
+}
+
+
+def _export_image_uri(path: Optional[str]) -> Optional[str]:
+    """轉正、縮小、重新編碼成 JPEG data URI。重新編碼後不帶 EXIF，SVG <image> 不會再轉一次。"""
+    if not path:
+        return None
+    try:
+        image = _load_image(path)
+    except Exception:  # noqa: BLE001 — 讀不到就只畫框，不讓整份匯出失敗
+        return None
+    image.thumbnail((EXPORT_MAX_SIDE, EXPORT_MAX_SIDE))
+    buf = io.BytesIO()
+    image.save(buf, "JPEG", quality=EXPORT_QUALITY)
+    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def _export_shapes(item: Dict[str, Any], class_names: List[str]) -> Dict[str, Any]:
+    """框與標籤的繪製資料，規則與前端 BoxOverlay 的「兩者＋顯示標籤」模式相同。"""
+    def name_of(cls: int) -> str:
+        return class_names[cls] if 0 <= cls < len(class_names) else str(cls)
+
+    width, height = item["width"], item["height"]
+    font = max(12, round(max(width, height) / 40))
+    gt_by_id = {g["id"]: g for g in item["gt"]}
+
+    drawn = []
+    for g in item["gt"]:
+        text = None
+        if g["status"] == "fn":
+            text = f"漏：{name_of(g['cls'])}"
+        elif g["status"] == "wrong":
+            text = f"標註：{name_of(g['cls'])}"
+        drawn.append((g, True, text))
+    for p in item["preds"]:
+        text = f"{name_of(p['cls'])} {p['conf']:.2f}"
+        if p["status"] == "fp":
+            text = f"誤報：{text}"
+        elif p["status"] == "wrong":
+            origin = gt_by_id.get(p["pair"])
+            text = f"錯判：{name_of(origin['cls']) if origin else '?'}→{text}"
+        drawn.append((p, False, text))
+
+    shapes = []
+    for box, dashed, text in drawn:
+        x1, y1, x2, y2 = box["box"]
+        shape = {
+            "x": x1, "y": y1, "w": max(0.0, x2 - x1), "h": max(0.0, y2 - y1),
+            "color": EXPORT_COLORS[box["status"]], "dashed": dashed, "label": None,
+        }
+        if text:
+            text_w = sum(font if ord(ch) > 0x2E80 else font * 0.6 for ch in text) + font * 0.5
+            text_h = font * 1.3
+            label_y = y1 - text_h if y1 - text_h >= 0 else y1
+            label_x = max(0.0, min(x1, width - text_w))
+            shape["label"] = {
+                "x": round(label_x, 1), "y": round(label_y, 1),
+                "w": round(text_w, 1), "h": round(text_h, 1),
+                "tx": round(label_x + font * 0.25, 1), "ty": round(label_y + font, 1),
+                "text": text,
+            }
+        shapes.append(shape)
+    return {"font": font, "shapes": shapes}
+
+
+def render_export(
+    job_id: str,
+    conf: float,
+    classes: Optional[List[int]] = None,
+    status: str = "errors",
+    sort: str = "errors",
+    limit: int = EXPORT_LIMIT_DEFAULT,
+    title: Optional[str] = None,
+) -> Optional[Tuple[str, str]]:
+    """
+    以目前的篩選條件匯出一份自足 HTML，回傳 (html, 檔名)。
+
+    比照成果報告「一個檔案就是全部」：影像以 base64 內嵌、框以 SVG 在伺服器端畫好，
+    離線可開、無 JS 也正確、可直接列印成 PDF。**不落地到 REPORTS_DIR**——那裡是評估報告
+    的清單，混進逐張檢視的匯出只會讓兩者都更難找。
+    """
+    job = get_job(job_id)
+    if job is None or job["state"] != "done":
+        return None
+    result = query_items(job_id, conf, classes, status, sort, 0, limit)
+    if result is None:
+        return None
+
+    class_names = result["class_names"]
+    figures = []
+    for item in result["items"]:
+        path = image_path(job_id, item["index"], "full") or image_path(job_id, item["index"], "thumb")
+        figures.append({
+            "name": item["name"],
+            "width": item["width"],
+            "height": item["height"],
+            "uri": _export_image_uri(path),
+            "counts": item["counts"],
+            "label_missing": item["label_missing"],
+            **_export_shapes(item, class_names),
+        })
+
+    # autoescape 一律開啟：檔名、類別名與標題都來自使用者的資料
+    env = Environment(loader=FileSystemLoader(str(report_service.TEMPLATE_DIR)), autoescape=True)
+    report_title = title or f"逐張檢視：{job['session_name']}（{job['dataset_name']} / {job['split']}）"
+    html = env.get_template("review_report.html.j2").render(
+        title=report_title,
+        job=job,
+        env=report_service._environment_info(),
+        conf=conf,
+        iou=IOU_THRESHOLD,
+        status_label=STATUS_LABELS.get(status, status),
+        class_filter=[class_names[c] for c in (classes or []) if 0 <= c < len(class_names)],
+        summary=result["summary"],
+        total=result["total"],
+        figures=figures,
+        colors=EXPORT_COLORS,
+    )
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"{report_service._safe_stem(report_title, 'review')}_{stamp}.html"
+    return html, filename
