@@ -465,11 +465,24 @@ mAP 回答「整體多好」，回答不了「漏了哪幾隻介殼蟲、誤報�
 
 **影像保存**：資料夾來源就地引用（LocalLibrary 絕不寫入）；ZIP 來源**保留**解壓出的影像供檢視，只刪掉已讀進 JSON 的標註——與評估「done 之前清掉」不同，因為這裡完成之後才是要看圖的時候。縮圖（長邊 480）寫進 job 目錄。影像端點以**索引**查清單取檔名再做 `commonpath` 檢查，不接受使用者傳入的檔名。
 
+影像目錄在 manifest 裡存成**相對於 job 目錄或 LocalLibrary 的位置**（`images_ref`），不是絕對路徑。docker-compose 讓主機與容器共用 `extracted_runs`，同一個 job 兩邊都會還原，但絕對路徑兩邊不同——實測在主機建立的 job 拿到容器裡開，縮圖正常、原圖全部 404。只有絕對路徑的舊 manifest，若路徑落在自己的 job 目錄底下（ZIP 來源）會自動換算回來。
+
 **不寫權重登錄簿**：登錄簿記「測過什麼、當時多少分」，逐張檢視不產生分數；而它只使用既有 session，權重在上傳或 LocalLibrary 登記時已入帳（CLAUDE.md 硬規則 13 指的是會引入新權重的路徑）。
 
 **與評估不同，可以中止**：推論逐張進行，刪除執行中的 job 會在下一張之前停下，worker 收尾時再清一次目錄。進度是真實百分比（已處理／總張數）。
 
 **TFLite**：ultralytics 8.4.122 對 `.tflite` 走 `nn/backends/litert.py`（`ai_edge_litert`），imgsz／names／end2end 由檔內嵌的 metadata 提供。能力探測只看 `ai_edge_litert` 在不在（`find_spec`，不 import），Windows 顯示停用並說明需 Docker。TFLite 的輸入尺寸在匯出時就固定了，指定不同的解析度會在推論前失敗並說明，而不是讓 ultralytics 硬塞。
+
+固定尺寸**自己從附加在 flatbuffer 尾端的 `metadata.json` zip 條目讀**，不呼叫 ultralytics 的內部函式：本機 8.4.122 有 `nn.backends.base.read_tflite_metadata`，重建後的 Docker 映像（8.4.135）已經沒有這個名字。第一次在 Docker 實測時 import 失敗被吞掉，檢查靜默失效，使用者看到的是 LiteRT 的「Dimension mismatch. Got 320 but expected 640」。
+
+Docker 實測（2026-09，ultralytics 8.4.135）：v8 權重以本工具匯出 FP32、640、end2end 開（21.9 秒，9.79 MB），上傳成 session 後與 `.pt` 各跑一次 v5 test 445 張：
+
+| | 正確 | 誤報 | 漏抓 | 類別錯 | 耗時 |
+|---|---|---|---|---|---|
+| `.pt` | 744 | 1,771 | 1,552 | 6 | 127 秒 |
+| `.tflite` | 766 | 1,754 | 1,528 | 8 | 74 秒 |
+
+逐框比對（同一張影像、同類別、IoU ≥ 0.5）配上 2,335 對，其中 97.0% 的 IoU ≥ 0.9；信心差平均 0.031、p95 0.126；各約 190 個框只出現在其中一邊。兩者的框幾乎重疊，匯出沒有問題。
 
 **自足 HTML 匯出**：依畫面上的篩選條件（預設「有錯誤」、上限 300 張），影像縮至 640 以 base64 內嵌、框在伺服器端畫成 SVG，離線可開、無 JS 也正確、可列印成 PDF。直接以附件回應、**不落地到 `REPORTS_DIR`**——那裡是評估報告的清單。模板 `autoescape=True`（檔名、類別名、標題都來自使用者資料）。
 
@@ -667,8 +680,9 @@ TP/FP/FN 取自 ultralytics `val()` 累積的混淆矩陣（`results.confusion_m
 - LocalLibrary 掃描在 Docker 下完全依賴 `docker-compose.yml` 的 `./LocalLibrary:/app/LocalLibrary:ro` 掛載。若忘記這條掛載，容器內的目錄是空的，掃描會回報「找不到可辨識內容」而**不是錯誤**——無法從容器內部可靠判斷一個目錄是不是真的 bind mount。
 - LocalLibrary 目錄走訪用 `follow_symlinks=False` 避免遞迴逃出根目錄，但樹內的**檔案**符號連結仍會被 `open()` 跟隨讀取。這在「單一本機操作者放自己的檔案」的前提下是可接受的；若部署模型改成多使用者或對外服務，需重新評估。
 - YOLO 推論已用真實權重驗證過（實測 `POST /api/inference` 回 `status: success`，CPU）；**SSDLite 推論路徑仍未用真實 `.pth` 驗證**。
-- **逐張檢視的 TFLite 路徑尚未以真實 `.tflite` 在 Docker 驗證**。能力閘、固定輸入尺寸的檢查與 job 流程有單元測試，但 ultralytics LiteRT backend 對 end2end 開／關兩種匯出的後處理是否與 `.pt` 一致，要用同一顆權重的 `.pt` 與 `.tflite` 各跑一次、在燈箱並排比對才算數。
+- 逐張檢視的 TFLite 路徑已在 Docker 以本工具匯出的 **FP32、640、end2end 開** 與 `.pt` 並排驗證一致（見 §7）；**end2end 關的匯出、FP16／INT8，以及模型端提供的 v5.7 `.tflite` 尚未實測**，ultralytics LiteRT backend 對兩種 end2end 的後處理走不同分支。
 - 逐張檢視的計數是**逐張貪婪配對**（同類別 IoU ≥ 0.5），與 `val()` 的配對演算法不同，數字不可與 mAP、Precision、Recall 或 Micro-Accuracy 直接比較；介面與匯出都已標明。
 - ZIP 來源的逐張檢視會把該 split 的影像**留在 job 目錄**直到 job 被刪除或逾期（`REVIEW_JOB_TTL_HOURS`，預設 24 小時；最多保留 `MAX_REVIEW_JOBS` 個）。v5 test split 約 240 MB。
 - `dataset_resolver._zip_split` 解壓時把影像攤平成 `images/<檔名>`：ZIP 內不同子資料夾若有同名影像會互相覆蓋。YOLO 標準佈局不會發生，評估與逐張檢視共用這個既有行為。
+- **`ultralytics` 沒有釘版本，本機與 Docker 實際裝到的不同**：2026-09 實測本機 venv 為 8.4.122、重建後的 Docker 映像為 8.4.135（`requirements.txt` 只寫套件名）。模型端釘在 8.4.121（YOLO26 需要 8.4 系列）。框座標、`model.names` 與 LiteRT backend 的行為都可能隨小版本變動，拿本機與容器的結果互相對照前先確認版本；要釘版本時比照 `torch` 的處理，重新做一次乾淨安裝並實測。
 - 類別對照表 `classMap.js` 的 `Thrips_Damage`（v5.5 起的第 9 類）是依模型端文件補上的，**大小寫尚未以 v5.7 checkpoint 的 `model.names` 核對**——本機權重皆為 8 類。對不上時徽章會退回灰色英文原名。完整端到端請跑 `e2e_tests/e2e_test.py`（設好 `E2E_ASSETS_DIR`）。

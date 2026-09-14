@@ -123,6 +123,6 @@ python e2e_tests/e2e_local_library.py
 - **上傳的資料集 ZIP 無法用於評估**：分析階段完全不解壓縮，影像位元組在請求結束後即釋放。請改用本機資料夾。
 - **評估未提供 COCO 式分桶 AP**：以「每類別 AP × 中位框面積」呈現尺度與表現的關係作為替代。
 - **逐張檢視的計數不是評估指標**：它是逐張的貪婪配對（同類別 IoU ≥ 0.5），用來找出有問題的影像，不可與 mAP、Precision、Recall 直接比較。
-- **逐張檢視的 TFLite 推論僅支援 Docker**，且尚未以真實 `.tflite` 完成與 `.pt` 的並排驗收。
+- **逐張檢視的 TFLite 推論僅支援 Docker**：已用本工具匯出的 FP32 `.tflite`（end2end 開）與 `.pt` 並排驗證框幾乎重疊，其他匯出設定尚未實測。
 
 更完整的已知限制清單與各項限制的技術背景，請參考 [docs/architecture.md](docs/architecture.md#12-已知限制)。
