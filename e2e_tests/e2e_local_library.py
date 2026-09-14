@@ -3,7 +3,7 @@
 
 與 e2e_test.py 的差異：那支是早期的上傳流程煙霧測試，需要一份特定佈局的 assets
 資料夾。這支改用**使用者本機資料夾裡實際存在的內容**，涵蓋資料集分析、模型匯出、
-本機資料夾掃描、驗證評估與成果報告，以及權重登錄簿（資料庫）與 API 信封契約。
+本機資料夾掃描、驗證評估與成果報告、逐張檢視，以及權重登錄簿（資料庫）與 API 信封契約。
 
 執行方式（後端需已在跑，Docker 或本機皆可）：
 
@@ -243,6 +243,51 @@ def count_boxes_per_split(library_dir):
             bump(entry, split, count)
 
     return totals
+
+
+def count_split_images_and_box_lines(library_dir, dataset_name, split):
+    """
+    獨立數出某資料集某 split 的影像數與「恰為 5 欄」的標註行數，作為逐張檢視的對照答案。
+
+    **不去重**：與 count_boxes_per_split 不同，逐張檢視自己解析標註檔、不經 ultralytics 的
+    np.unique，完全相同的兩列就是兩個框。回傳 (None, None) 表示找不到該資料集。
+    """
+    path = os.path.join(library_dir, dataset_name)
+    images = lines = 0
+
+    def member_of(parts, kind):
+        return len(parts) >= 3 and parts[-2] == kind and parts[-3] == split
+
+    def five_column_lines(text):
+        return sum(1 for ln in text.splitlines() if len(ln.split()) == 5)
+
+    if os.path.isfile(path) and path.lower().endswith(".zip"):
+        with zipfile.ZipFile(path) as zf:
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                parts = info.filename.split("/")
+                if member_of(parts, "images") and parts[-1].lower().endswith(IMAGE_EXTS):
+                    images += 1
+                elif member_of(parts, "labels") and parts[-1].endswith(".txt") and parts[-1] != "classes.txt":
+                    lines += five_column_lines(zf.read(info).decode("utf-8", errors="replace"))
+        return images, lines
+
+    if os.path.isdir(path):
+        for dirpath, _dirnames, filenames in os.walk(path):
+            parts = dirpath.replace("\\", "/").split("/")
+            if len(parts) < 2 or parts[-2] != split:
+                continue
+            if parts[-1] == "images":
+                images += sum(1 for n in filenames if n.lower().endswith(IMAGE_EXTS))
+            elif parts[-1] == "labels":
+                for name in filenames:
+                    if name.endswith(".txt") and name != "classes.txt":
+                        with open(os.path.join(dirpath, name), "r", encoding="utf-8", errors="replace") as f:
+                            lines += five_column_lines(f.read())
+        return images, lines
+
+    return None, None
 
 
 def find_labeled_image(library_dir):
@@ -782,6 +827,107 @@ def phase_report(job_ids):
           any(r["report_id"] == meta["report_id"] for r in listed.get("reports", [])))
 
 
+def phase_review(sessions, datasets):
+    """逐張檢視：模型逐張跑過 split，存下標註框與預測框。
+
+    對照答案全部由 E2E 自己從檔案數出來：split 的影像數，以及標註行數——後者給出一條
+    與門檻無關的不變量：每個標註框必定是 TP、FN 或類別錯其中之一，所以三者總和在任何
+    信心門檻下都等於標註框總數。座標換算或配對寫錯時這條會先破。
+    """
+    section("階段 12／16：逐張檢視（標註框 vs 預測框）")
+    if not sessions or not datasets:
+        print("  缺少模型或資料集，略過")
+        return
+
+    targets = api("GET", "/reviews/targets")
+    check("解析度選項含 App 即時辨識用的 320", 320 in (targets.get("imgsz_choices") or []),
+          str(targets.get("imgsz_choices")))
+    usable = [d for d in targets.get("datasets", []) if d.get("available")]
+    session_id = next((s["session_id"] for s in targets.get("sessions", []) if s.get("available")), None)
+    if not usable or session_id is None:
+        print("  沒有可檢視的模型或資料集，略過")
+        return
+
+    registered = api("GET", "/datasets").get("datasets", {})
+    usable.sort(key=lambda d: (registered.get(d["dataset_id"], {}) or {}).get("total_images") or 0,
+                reverse=True)
+    dataset = usable[0]
+    split = dataset.get("default_split")
+    expected_images, expected_lines = count_split_images_and_box_lines(LIBRARY_DIR, dataset["name"], split)
+    print(f"  檢視 {dataset['name']} / {split}，解析度 320"
+          + (f"（獨立數出 {expected_images} 張、{expected_lines} 個標註框）" if expected_images else ""))
+
+    started = time.monotonic()
+    job = api("POST", "/reviews", json={"session_id": session_id, "dataset_id": dataset["dataset_id"],
+                                        "split": split, "imgsz": 320}).get("job") or {}
+    job_id = job.get("job_id")
+    check("逐張檢視 job 已建立", bool(job_id))
+    if not job_id:
+        return
+
+    for _ in range(600):
+        time.sleep(2)
+        job = api("GET", f"/reviews/{job_id}").get("job") or {}
+        if job.get("state") in ("done", "failed"):
+            break
+    check("逐張檢視完成", job.get("state") == "done",
+          f"state={job.get('state')}, 耗時 {time.monotonic() - started:.0f}s, {job.get('message') or ''}")
+    if job.get("state") != "done":
+        return
+
+    check("實際使用的解析度是 320", job.get("imgsz_used") == 320, str(job.get("imgsz_used")))
+    if expected_images is not None:
+        check("張數等於 split 的影像數", job.get("image_count") == expected_images,
+              f"{job.get('image_count')} vs 實際 {expected_images}")
+
+    first = api("GET", f"/reviews/{job_id}/items", params={"conf": 0.25, "status": "all", "limit": 200})
+    summary = first.get("summary") or {}
+    readable = (job.get("image_count") or 0) - len(job.get("unreadable") or [])
+    check("計數涵蓋所有可解碼的影像", summary.get("images") == readable, f"{summary.get('images')} vs {readable}")
+
+    out_of_bounds = [
+        item["name"] for item in first.get("items", [])
+        for box in item["gt"] + item["preds"]
+        if not (0 <= box["box"][0] <= box["box"][2] <= item["width"] + 0.5
+                and 0 <= box["box"][1] <= box["box"][3] <= item["height"] + 0.5)
+    ]
+    check("所有框的座標落在影像範圍內", not out_of_bounds, f"越界：{out_of_bounds[:3]}" if out_of_bounds else
+          f"檢查 {len(first.get('items', []))} 張")
+
+    issues = job.get("label_issues") or {}
+    gt_total = summary.get("tp", 0) + summary.get("fn", 0) + summary.get("wrong", 0)
+    strict = api("GET", f"/reviews/{job_id}/items", params={"conf": 0.7, "limit": 1}).get("summary") or {}
+    check("TP+FN+類別錯在不同門檻下不變（每個標註框恰屬其一）",
+          gt_total == strict.get("tp", 0) + strict.get("fn", 0) + strict.get("wrong", 0),
+          f"conf 0.25：{gt_total}，conf 0.7：{strict.get('tp', 0) + strict.get('fn', 0) + strict.get('wrong', 0)}")
+    if expected_lines is not None and not issues.get("malformed") and not issues.get("class_out_of_range"):
+        check("TP+FN+類別錯等於獨立數出的標註框數", gt_total == expected_lines,
+              f"{gt_total} vs 實際 {expected_lines}")
+
+    base = BASE_URL.rsplit("/api", 1)[0]
+    item = (first.get("items") or [None])[0]
+    if item:
+        thumb = requests.get(f"{base}{item['thumb_url']}", timeout=60)
+        check("縮圖可取得", thumb.status_code == 200 and thumb.headers.get("content-type", "").startswith("image/"),
+              f"{thumb.status_code}, {len(thumb.content):,} bytes")
+        full = requests.get(f"{base}{item['image_url']}", timeout=60)
+        check("原圖可取得", full.status_code == 200 and len(full.content) > len(thumb.content),
+              f"{len(full.content):,} bytes")
+    check("超出影像清單的索引回 404", raw("GET", f"/reviews/{job_id}/image/999999").status_code == 404)
+
+    export = raw("GET", f"/reviews/{job_id}/export", params={"status": "errors", "limit": 5})
+    html = export.text
+    external = re.findall(r'(?:src|href)="(?!data:)[^"]+"', html)
+    check("匯出的 HTML 可下載且為附件", export.status_code == 200
+          and "attachment" in export.headers.get("content-disposition", ""), str(export.status_code))
+    check("匯出的 HTML 完全自足", "data:image/jpeg;base64," in html and not external,
+          f"{html.count('data:image/jpeg')} 張內嵌，{len(external)} 個外部引用")
+    check("匯出明示逐張計數不是評估指標", "逐張計數（非評估指標）" in html)
+
+    api("DELETE", f"/reviews/{job_id}")
+    check("刪除後查詢回 404", raw("GET", f"/reviews/{job_id}").status_code == 404)
+
+
 def phase_registry_weights(sessions):
     """權重登錄簿：註冊時是否確實入帳，且身分正確。
 
@@ -1040,6 +1186,7 @@ def main():
         phase_export(sessions)
         eval_jobs = phase_evaluation(sessions, datasets)
         phase_report(eval_jobs)
+        phase_review(sessions, datasets)
         recorded = phase_registry_weights(sessions)
         phase_registry_metrics(eval_jobs, count_boxes_per_split(LIBRARY_DIR))
         phase_registry_durability(recorded)
