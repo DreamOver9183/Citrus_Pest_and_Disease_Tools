@@ -92,6 +92,10 @@ export const classDot = (name) => CLASS_DOT[name] || 'bg-ds-neutral-600';
 export const shortClassName = (raw) =>
   (CLASS_MAP[raw]?.name || raw || '').replace(/\s*\(.*\)\s*$/, '');
 
+// 上傳的 TFLite session 名稱本身就帶「(TFLite)」，名稱裡已經有就不再補一次
+export const tfliteSuffix = (name, format, text = ' · TFLite') =>
+  format === 'tflite' && !/tflite/i.test(name || '') ? text : '';
+
 export const formatElapsed = (seconds) => {
   if (seconds === null || seconds === undefined) return '';
   const n = Number(seconds);

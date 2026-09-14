@@ -2,7 +2,7 @@ import React from 'react';
 import { RefreshCw, Trash2 } from 'lucide-react';
 import { useExperiment } from '../../context/ExperimentContext';
 import { stateStyle } from '../system-specs/exportFormats';
-import { formatElapsed } from './reviewStyles';
+import { formatElapsed, tfliteSuffix } from './reviewStyles';
 
 // 逐張檢視紀錄。已完成的可點選成為目前檢視的對象。
 //
@@ -38,7 +38,7 @@ const ReviewJobList = () => {
                 <p className="text-sm text-ink truncate">{job.session_name}</p>
                 <p className="text-xs text-ds-neutral-500 truncate tabular-nums">
                   {job.dataset_name} / {job.split} · 解析度 {size ?? '模型預設'}
-                  {job.weight_format === 'tflite' ? ' · TFLite' : ''}
+                  {tfliteSuffix(job.session_name, job.weight_format)}
                 </p>
               </button>
               <div className="flex items-center gap-1.5 flex-shrink-0">

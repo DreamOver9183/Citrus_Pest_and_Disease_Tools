@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { axios, errorMessage } from '../../api/client';
 import { useExperiment } from '../../context/ExperimentContext';
 import BoxOverlay from './BoxOverlay';
-import { CHIP, LAYER_OPTIONS } from './reviewStyles';
+import { CHIP, LAYER_OPTIONS, tfliteSuffix } from './reviewStyles';
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 6;
@@ -38,7 +38,7 @@ const Counts = ({ counts }) => (
 );
 
 const jobLabel = (job) =>
-  `${job.session_name} · 解析度 ${job.imgsz_used ?? '模型預設'}${job.weight_format === 'tflite' ? ' · TFLite' : ''}`;
+  `${job.session_name} · 解析度 ${job.imgsz_used ?? '模型預設'}${tfliteSuffix(job.session_name, job.weight_format)}`;
 
 const Panel = ({ job, state, layer, transform, onWheel, onMouseDown }) => {
   const viewportRef = useRef(null);

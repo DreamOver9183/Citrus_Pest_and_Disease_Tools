@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Play, RefreshCw, AlertCircle } from 'lucide-react';
 import { useExperiment } from '../../context/ExperimentContext';
-import { CHIP } from './reviewStyles';
+import { CHIP, tfliteSuffix } from './reviewStyles';
 
 const SELECT_CLASS =
   'w-full bg-ground border border-ds-neutral-700 rounded-ds px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2';
@@ -88,7 +88,7 @@ const ReviewLauncher = () => {
           {sessions.map((s) => (
             <option key={s.session_id} value={s.session_id} disabled={!s.available}>
               {s.name}
-              {s.weight_format === 'tflite' ? '（TFLite）' : ''}
+              {tfliteSuffix(s.name, s.weight_format, '（TFLite）')}
               {s.available ? '' : ' — 不支援'}
             </option>
           ))}

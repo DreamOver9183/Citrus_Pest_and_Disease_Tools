@@ -14,6 +14,7 @@ import {
   classDot,
   shortClassName,
   statusCount,
+  tfliteSuffix,
 } from './reviewStyles';
 
 // 與後端 review_service.EXPORT_LIMIT_DEFAULT 一致
@@ -92,7 +93,7 @@ const ReviewGallery = ({ job, onOpen }) => {
           <h3 className="text-base font-medium text-ink truncate">{job.session_name}</h3>
           <p className="text-sm text-ds-neutral-500 mt-0.5 tabular-nums">
             {job.dataset_name} / {job.split} · {job.image_count} 張 · 解析度 {job.imgsz_used ?? '模型預設'}
-            {job.weight_format === 'tflite' ? ' · TFLite' : ''}
+            {tfliteSuffix(job.session_name, job.weight_format)}
           </p>
         </div>
         <div className="flex items-center gap-3">
