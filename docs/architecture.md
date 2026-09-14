@@ -447,6 +447,36 @@ Jinja2 隨 torch 傳遞安裝，**沒有新增任何套件**。
 
 `extracted_runs/evaluations/` 已加入 `delete_session()` 的容器白名單。這是 §5 記錄過的同一個坑第四次現形（`datasets`／`exports`／`local_library` 各踩過一次），`tests/test_session_container_dirs.py` 的參數化清單同步補上。
 
+### 逐張檢視（看圖驗收）
+
+mAP 回答「整體多好」，回答不了「漏了哪幾隻介殼蟲、誤報長什麼樣子」。逐張檢視讓模型逐張跑過一個 split，把**標註框與預測框疊在同一張圖上**，並能以 320／640 或 `.pt`／`.tflite` 逐張並排。放在「驗證評估」分頁內作為第二模式——輸入與評估相同（模型＋資料集＋split），也維持 adoption-notes B3「nav 6 個分頁」的決定。
+
+**這是視覺化，不是指標。** 上面「不自己算 mAP」的原則不變：逐張計數只用來替影像分類、篩選與排序，介面與匯出一律標示「逐張計數（非評估指標）」，不彙總成 Precision／Recall。
+
+**配對規則（`review_boxes.match`，純函式）**：預測依信心降冪，分兩段——先各自找「同類別、未配對、IoU ≥ 0.5」的標註（正確），剩下的再找「其他類別、未配對、IoU ≥ 0.5」的標註（類別錯，該標註不再算漏抓），其餘預測為誤報、未配到的標註為漏抓。分兩段是因為一次掃完時，高信心的錯類預測會先搶走標註，低信心但類別正確的預測反而變成誤報。配對**先對全部類別做完才依類別篩選**，否則「只看介殼蟲」會把被錯判成介殼蟲的蚜蟲標註丟掉，錯判退化成誤報。
+
+**正確性的獨立對照（實測）**：同一顆 v8 權重（SHA-256 `b77cba5b…`）、v5 test 445 張。ultralytics 自己的混淆矩陣（conf 0.25、IoU 0.45）為 TP/FP/FN = 777／1,718／1,523；逐張檢視（640、conf 0.25、IoU 0.5）為 744／1,771／1,552，另有 6 個類別錯。IoU 門檻較嚴，TP 少一點、FP／FN 多一點，方向與幅度都吻合——座標換算或配對寫錯時不會長這樣。E2E 另外鎖一條與門檻無關的不變量：每個標註框恰屬正確、漏抓、類別錯之一，三者總和等於自己從檔案數出的 5 欄標註行數。
+
+**低門檻存檔，查詢時才配對。** 推論以 conf 0.05 存下全部框（`items.json`），拖門檻滑桿只打 `/reviews/{id}/items` 重新配對、篩選、分頁，不重跑推論。
+
+**影像一律經 PIL 轉正後才餵給模型。** `Image.open` → `ImageOps.exif_transpose` → RGB。寬高、推論、瀏覽器顯示（`<img>` 預設依 EXIF 轉正）因此是同一個方向，與 ultralytics 訓練時以 `exif_size` 驗證標註的假設一致；PIL 也順帶避開 `cv2.imread` 遇到中文路徑回傳 `None` 而不報錯的地雷。縮圖與匯出用的影像是轉正後重新編碼、不帶 EXIF，不會被再轉一次。
+
+> **地雷**：ultralytics 會 patch 全域的 `PIL.Image.open`，解碼失敗時改去 `import pi_heif`，沒裝就拋 `ModuleNotFoundError` 而不是 `OSError`。所以逐張迴圈對單張解碼失敗是寬鬆捕捉（略過並列入 `unreadable`），否則一張壞圖會讓整批失敗。
+
+**影像保存**：資料夾來源就地引用（LocalLibrary 絕不寫入）；ZIP 來源**保留**解壓出的影像供檢視，只刪掉已讀進 JSON 的標註——與評估「done 之前清掉」不同，因為這裡完成之後才是要看圖的時候。縮圖（長邊 480）寫進 job 目錄。影像端點以**索引**查清單取檔名再做 `commonpath` 檢查，不接受使用者傳入的檔名。
+
+**不寫權重登錄簿**：登錄簿記「測過什麼、當時多少分」，逐張檢視不產生分數；而它只使用既有 session，權重在上傳或 LocalLibrary 登記時已入帳（CLAUDE.md 硬規則 13 指的是會引入新權重的路徑）。
+
+**與評估不同，可以中止**：推論逐張進行，刪除執行中的 job 會在下一張之前停下，worker 收尾時再清一次目錄。進度是真實百分比（已處理／總張數）。
+
+**TFLite**：ultralytics 8.4.122 對 `.tflite` 走 `nn/backends/litert.py`（`ai_edge_litert`），imgsz／names／end2end 由檔內嵌的 metadata 提供。能力探測只看 `ai_edge_litert` 在不在（`find_spec`，不 import），Windows 顯示停用並說明需 Docker。TFLite 的輸入尺寸在匯出時就固定了，指定不同的解析度會在推論前失敗並說明，而不是讓 ultralytics 硬塞。
+
+**自足 HTML 匯出**：依畫面上的篩選條件（預設「有錯誤」、上限 300 張），影像縮至 640 以 base64 內嵌、框在伺服器端畫成 SVG，離線可開、無 JS 也正確、可列印成 PDF。直接以附件回應、**不落地到 `REPORTS_DIR`**——那裡是評估報告的清單。模板 `autoescape=True`（檔名、類別名、標題都來自使用者資料）。
+
+**效能實測（CPU，445 張）**：320 約 43 秒、640 約 64 秒。明顯快於評估的 4 分鐘：這裡只有單張 predict，沒有 `val()` 的 conf 0.001 全量框、指標積分與圖表。
+
+`extracted_runs/reviews/` 已加入 `delete_session()` 的容器白名單（第五次）。
+
 ## 8. Docker 環境的路徑對齊（重要）
 
 映像檔把專案結構**攤平**成 `/app/backend` 與 `/app/frontend`，並沒有主機端的 `ShowResultsWeb/` 這一層。而 `config.py` 的 `PROJECT_ROOT` 預設值是 `BACKEND_DIR.parent.parent`：
@@ -636,4 +666,9 @@ TP/FP/FN 取自 ultralytics `val()` 累積的混淆矩陣（`results.confusion_m
 - 資料集分析是單一同步請求（實測 16,043 個成員約 1.1 秒）。日後若在前面加反向代理，預設約 60 秒的逾時可能截斷超大資料集；回應中的 `analysis_ms` 可用來觀測這個天花板。
 - LocalLibrary 掃描在 Docker 下完全依賴 `docker-compose.yml` 的 `./LocalLibrary:/app/LocalLibrary:ro` 掛載。若忘記這條掛載，容器內的目錄是空的，掃描會回報「找不到可辨識內容」而**不是錯誤**——無法從容器內部可靠判斷一個目錄是不是真的 bind mount。
 - LocalLibrary 目錄走訪用 `follow_symlinks=False` 避免遞迴逃出根目錄，但樹內的**檔案**符號連結仍會被 `open()` 跟隨讀取。這在「單一本機操作者放自己的檔案」的前提下是可接受的；若部署模型改成多使用者或對外服務，需重新評估。
-- YOLO 推論已用真實權重驗證過（實測 `POST /api/inference` 回 `status: success`，CPU）；**SSDLite 推論路徑仍未用真實 `.pth` 驗證**。完整端到端請跑 `e2e_tests/e2e_test.py`（設好 `E2E_ASSETS_DIR`）。
+- YOLO 推論已用真實權重驗證過（實測 `POST /api/inference` 回 `status: success`，CPU）；**SSDLite 推論路徑仍未用真實 `.pth` 驗證**。
+- **逐張檢視的 TFLite 路徑尚未以真實 `.tflite` 在 Docker 驗證**。能力閘、固定輸入尺寸的檢查與 job 流程有單元測試，但 ultralytics LiteRT backend 對 end2end 開／關兩種匯出的後處理是否與 `.pt` 一致，要用同一顆權重的 `.pt` 與 `.tflite` 各跑一次、在燈箱並排比對才算數。
+- 逐張檢視的計數是**逐張貪婪配對**（同類別 IoU ≥ 0.5），與 `val()` 的配對演算法不同，數字不可與 mAP、Precision、Recall 或 Micro-Accuracy 直接比較；介面與匯出都已標明。
+- ZIP 來源的逐張檢視會把該 split 的影像**留在 job 目錄**直到 job 被刪除或逾期（`REVIEW_JOB_TTL_HOURS`，預設 24 小時；最多保留 `MAX_REVIEW_JOBS` 個）。v5 test split 約 240 MB。
+- `dataset_resolver._zip_split` 解壓時把影像攤平成 `images/<檔名>`：ZIP 內不同子資料夾若有同名影像會互相覆蓋。YOLO 標準佈局不會發生，評估與逐張檢視共用這個既有行為。
+- 類別對照表 `classMap.js` 的 `Thrips_Damage`（v5.5 起的第 9 類）是依模型端文件補上的，**大小寫尚未以 v5.7 checkpoint 的 `model.names` 核對**——本機權重皆為 8 類。對不上時徽章會退回灰色英文原名。完整端到端請跑 `e2e_tests/e2e_test.py`（設好 `E2E_ASSETS_DIR`）。

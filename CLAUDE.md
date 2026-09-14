@@ -10,9 +10,9 @@
 - **[docs/architecture.md](docs/architecture.md)** — 每個子系統「為什麼這樣設計」的完整脈絡，含實測數據、被否決的替代方案、關鍵地雷的詳細說明。**修改任何子系統前務必先讀對應章節**，很多看似奇怪的寫法背後有已驗證過的理由。
 - **本檔案** — 開發流程、跨子系統的硬規則、以及不值得寫進 architecture.md 但會讓你浪費半小時的細節。
 
-另外還有一份**提案性質**的文件，只有在要動 UI 風格時才需要讀：
+另外還有一份 UI 設計系統的文件，新增或修改前端元件前要讀：
 
-- **[docs/ui_redesign/](docs/ui_redesign/)** — 現況 UI 的重建樣板，以及以 Nocturne 設計系統提出的重新設計方向。**這是提案，一行都還沒實作**，`ShowResultsWeb/frontend` 目前仍是既有的 Tailwind + 多色語彙。開檔方式見 [docs/ui_redesign/github.md](docs/ui_redesign/github.md)；**採用前必須先讀 [docs/ui_redesign/adoption-notes.md](docs/ui_redesign/adoption-notes.md)**——它記錄了四個已定案的前置決策（語意色與類別色怎麼補、模型頁與登錄簿的分工、分頁數、Tailwind 怎麼接），以及一條會讓人踩到的限制：前端有 376 處透明度修飾詞，token 必須另備 RGB 通道版本。
+- **[docs/ui_redesign/](docs/ui_redesign/)** — 現況 UI 的重建樣板，以及 Nocturne 設計系統的重新設計方向。**遷移進行中**：基礎建設層、全域 shell、「模型與裝置」分頁與「驗證評估」的逐張檢視模式已是 Nocturne，其餘分頁的內容區仍是既有的 Tailwind + 多色語彙（進度見 adoption-notes 開頭）。**新增的元件一律用 Nocturne token**，不要再寫 glass-panel 與多色語彙。開檔方式見 [docs/ui_redesign/github.md](docs/ui_redesign/github.md)；**採用前必須先讀 [docs/ui_redesign/adoption-notes.md](docs/ui_redesign/adoption-notes.md)**——它記錄了四個已定案的前置決策（語意色與類別色怎麼補、模型頁與登錄簿的分工、分頁數、Tailwind 怎麼接），以及一條會讓人踩到的限制：前端有 376 處透明度修飾詞，token 必須另備 RGB 通道版本。
 
 ## 專案速覽
 
@@ -74,7 +74,7 @@ E2E_ASSETS_DIR=<path> python e2e_tests/e2e_test.py   # 早期的上傳流程煙�
 
 2. **前端跨分頁必須存活的狀態放 `context/hooks/`，不要放元件本地 state**。`App.jsx` 用純 `&&` 條件渲染分頁，切走分頁＝該元件樹整個 unmount，本地 state（含進行中的 request/AbortController）會直接消失。判斷標準：這個狀態切走分頁再切回來還需要在嗎？需要就放耐久 hook，不需要就放元件本地。`ExperimentContext.jsx` 是純組合層（見 architecture.md §3「Context 組合模式」），新 hook 要在這裡 compose 進去、對外仍經由單一 `useExperiment()` 暴露。
 
-3. **Tailwind class 字串必須完整靜態出現在原始碼中**，不能用字串拼接（`` `bg-${color}-500` `` 這種在 JIT 模式下會被裁掉，因為 Tailwind 是靜態掃描原始碼字串，不是執行期解析）。需要依變數選色時用完整字串的查表物件（參考 `exportFormats.js`/`classMap.js` 的 `ACCENT_STYLES` 寫法）。
+3. **Tailwind class 字串必須完整靜態出現在原始碼中**，不能用字串拼接（`` `bg-${color}-500` `` 這種在 JIT 模式下會被裁掉，因為 Tailwind 是靜態掃描原始碼字串，不是執行期解析）。需要依變數選色時用完整字串的查表物件（參考 `system-specs/exportFormats.js` 的 `STATE_STYLES`、`metric-dashboard/ModelMetricCard.jsx` 的 `ACCENT_STYLES`）。SVG 的 `stroke`／`fill` 屬性直接寫 `var(--color-…)` 不受此限，見 `review/reviewStyles.js`。
 
 4. **模型/資料集的 `source_type`／`source` 欄位是前端精確比對、沒有 fallback 的字串**，不是自由文字。改動或新增來源前，先搜尋消費端（例如 `ModelMetricCard.jsx` 對 `source_type === 'single_weight'` 的精確比對）確認沒有既有邏輯依賴特定字面值。
 
@@ -84,17 +84,17 @@ E2E_ASSETS_DIR=<path> python e2e_tests/e2e_test.py   # 早期的上傳流程煙�
 
 7. **計算經過時間一律用 `time.monotonic()`，絕不與 `time.time()` 混用**。混用曾直接產出「29785752 分 60 秒」這種畫面（見 architecture.md §5）。
 
-8. **任何會讓模型跑推論的新功能，都不得 import `model_service`**。`ModelManager._lock` 是非重入鎖且 `predict()` 全程持有，走它會讓所有推論請求排在你的長任務後面，而在持鎖狀態下呼叫 `load_model()` 直接死鎖。自建用完即丟的 `YOLO()` 實例（約 5MB），`export_service` 與 `evaluation_service` 都是這樣做的。
+8. **任何會讓模型跑推論的新功能，都不得 import `model_service`**。`ModelManager._lock` 是非重入鎖且 `predict()` 全程持有，走它會讓所有推論請求排在你的長任務後面，而在持鎖狀態下呼叫 `load_model()` 直接死鎖。自建用完即丟的 `YOLO()` 實例（約 5MB），`export_service`、`evaluation_service` 與 `review_service` 都是這樣做的。
 
 9. **`ultralytics` 的環境變數（`YOLO_AUTOINSTALL`/`YOLO_OFFLINE`）只能設在 [app/__init__.py](ShowResultsWeb/backend/app/__init__.py)，不能設在 `config.py`**。`AUTOINSTALL` 是 ultralytics 的模組級常數，在 `import ultralytics` 當下就凍結；`model_service.py` 第 6 行 import ultralytics、第 10 行才 import config，config.py 已經太晚。package `__init__` 保證先於任何 submodule 執行才是唯一可靠位置。
 
 10. **改動需要「讀取某個位元組來源」的邏輯（ZIP 解析、資料夾解析）時，優先看能不能用既有的 reader 抽象**（`ZipArchiveReader`/`DirArchiveReader`，見 architecture.md §6）。這兩者只包一層 `build_tree()`/`read(path, cap)`，上層的 YOLO/COCO/VOC 解析邏輯完全不用關心來源是 ZIP 還是真實目錄。目錄端的 `_DirEntryStat` **必須有真實的 `.file_size` 屬性，絕不能用 `None` 佔位**——`dataset_analyzer` 的截斷保護是 `if info is not None and not budget.try_spend(info.file_size)`，塞 `None` 會讓保護悄悄失效而不報錯。
 
-11. **新增任何會把 session 的 `dir_path` 指到 `extracted_runs/<新容器>/` 底下的功能時，那個容器名一定要加進 `delete_session()` 的白名單**（[session_manager.py](ShowResultsWeb/backend/app/services/session_manager.py) 內的 `["temp_output", "temp", "reports", …]`）。該函式用字串切割反推刪除目標，容器名不在白名單就會 `rmtree` 整個容器根目錄，刪一個 session 連帶清空其他所有同類資料。`datasets`/`exports`/`local_library`/`evaluations` 都各自踩過一次，`tests/test_session_container_dirs.py` 有參數化測試，新容器記得補一行。
+11. **新增任何會把 session 的 `dir_path` 指到 `extracted_runs/<新容器>/` 底下的功能時，那個容器名一定要加進 `delete_session()` 的白名單**（[session_manager.py](ShowResultsWeb/backend/app/services/session_manager.py) 內的 `["temp_output", "temp", "reports", …]`）。該函式用字串切割反推刪除目標，容器名不在白名單就會 `rmtree` 整個容器根目錄，刪一個 session 連帶清空其他所有同類資料。`datasets`/`exports`/`local_library`/`evaluations` 都各自踩過一次（`reviews` 新增時一併補上），`tests/test_session_container_dirs.py` 有參數化測試，新容器記得補一行。
 
 12. **所有 API 回應一律走 `ApiResponse` 信封，錯誤一律 `raise ApiException`。** 不要回裸 dict，不要用 HTTP 200 夾帶 `{"status": "error"}`，不要重新引入 `response_model_exclude_unset=True`（它會靜默裁掉沒賦值的欄位，前端拿到 `undefined`——那是舊版的地雷，已由固定信封消除）。`tests/test_envelope.py` 會走訪所有路由強制這件事，新端點沒照做會直接紅。錯誤碼與 HTTP 狀態的對照表在 [app/core/envelope.py](ShowResultsWeb/backend/app/core/envelope.py) 的 `ERROR_STATUS`，分界線是「400 = 請求本身壞掉，422 = 請求沒問題但這件事現在不能做」。
 
-13. **權重登錄簿的寫入絕不能讓主流程失敗，也絕不能在持鎖時發生。** 資料庫是**可選**相依：`registry_service` 的每個寫入函式都自己吞例外並只印日誌，呼叫端不必判斷成敗。而且 DB I/O 一律在 `SESSIONS_LOCK` / `EVAL_JOBS_LOCK` **之外**——資料庫可能在網路彼端，在鎖內等待往返會讓所有推論請求排隊。目前有三個寫入接點（`sessions.py` 兩條上傳路徑、`library_scanner.register()`、`evaluation_service._process_job()`），**新增載入模型的路徑時記得補上第四個**——漏掉 `library_scanner` 那次，單元測試全過而 E2E 才抓到。
+13. **權重登錄簿的寫入絕不能讓主流程失敗，也絕不能在持鎖時發生。** 資料庫是**可選**相依：`registry_service` 的每個寫入函式都自己吞例外並只印日誌，呼叫端不必判斷成敗。而且 DB I/O 一律在 `SESSIONS_LOCK` / `EVAL_JOBS_LOCK` **之外**——資料庫可能在網路彼端，在鎖內等待往返會讓所有推論請求排隊。目前有三個寫入接點（`sessions.py` 兩條上傳路徑、`library_scanner.register()`、`evaluation_service._process_job()`），**新增載入模型的路徑時記得補上第四個**——漏掉 `library_scanner` 那次，單元測試全過而 E2E 才抓到。逐張檢視（`review_service`）**刻意不寫**：它不產生指標，且只使用已入帳的既有 session。
 
 14. **權重的身分是檔案內容的 SHA-256，不是 `session_id`。** 後者每次掃描都重新產生，拿它當 key 會讓同一顆 best.pt 每重掃一次就多一列。另外**絕不在 `library_scanner.discover()` 裡算雜湊**：掃描是唯讀探索、要維持秒級，對每個 `.pt` 做雜湊會讓它變成分鐘級。
 
@@ -118,6 +118,7 @@ E2E_ASSETS_DIR=<path> python e2e_tests/e2e_test.py   # 早期的上傳流程煙�
 - LocalLibrary 掃描結果不落地（重啟後消失）——這是設計目標本身（「直到系統關閉、刪除暫存」），不是忘記持久化。
 - LocalLibrary 的掃描**不會自動載入**任何東西，一定要使用者勾選後按載入——`MAX_SESSIONS` 只有 3，自動載入等於由掃描順序替使用者決定拿到哪幾個模型。
 - Micro-Accuracy（Jaccard）**不另外掃一次資料集**，直接取 `val()` 已累積好的混淆矩陣，代價為零；代價是它綁在 ultralytics 寫死的 conf=0.25 / IoU=0.45（規格文件寫 IoU≥0.5，這 0.05 的落差**寫進資料列與 UI 明說**，而不是靠 monkeypatch 套件內部去消除）。
+- 逐張檢視的正確／漏抓／誤報／類別錯**只是逐張計數，不彙總成任何指標**，介面與匯出都標「非評估指標」。它自己做 IoU 配對是為了替框上色，不是另一套 mAP；不要把它的數字接進登錄簿或報告的指標表。
 - 評估**不自己實作 mAP**，一律走 `model.val()`——自行實作 IoU 配對與 PR 積分容易在細節上算錯，交出一個和 ultralytics 對不上的數字在學術場合是負分。同理刻意不做 COCO 式分桶 AP。
 - 已完成的評估結果**跨重啟保留，且不做「來源 session 還在嗎」的孤兒清除**（與 `export_service` 明確不同）——本專案多數 session 來自不落地的 LocalLibrary，那個過濾等於每次重啟刪光，而一次評估要跑 4 分鐘。
 

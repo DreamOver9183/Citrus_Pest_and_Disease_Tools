@@ -8,11 +8,12 @@
 
 - **模型與裝置管理**：上傳 YOLO（`.pt` / ZIP 訓練成果）或 SSDLite（`.pth`）權重，自動解析訓練參數與指標摘要；支援 CPU / CUDA / MPS 裝置切換。
 - **消融指標與精度分析**：自動裁切、繪製訓練曲線與正規化混淆矩陣，多模型並排比較。
-- **即時影像診斷**：拖放圖片或整個資料夾即可批次推論，支援信心閾值即時調整與標註前後對照。
+- **即時影像診斷**：拖放圖片或整個資料夾即可批次推論，支援信心閾值即時調整、原圖與推論結果對照，並可指定推論解析度（320／416／512／640），重現 App 端即時辨識的條件。
 - **資料集分析**：上傳 YOLO / COCO / Pascal VOC 格式的資料集 ZIP，自動辨識格式並統計影像數、標註數、類別分佈與健檢結果——**全程不解壓縮**，數 GB 的資料集也能在一秒內完成分析。
 - **模型格式匯出**：一鍵將 `best.pt` 轉換為 ONNX，或於 Docker 環境轉換為 TFLite（LiteRT），背景 job 執行並提供下載。
 - **本機資料夾掃描**：把訓練成果或資料集（**資料夾或 ZIP 皆可**）放進專案根目錄的 `LocalLibrary/`，按一下「掃描」即可列出找到的所有權重與資料集，勾選要載入的項目直接使用——**不需上傳**，系統對該資料夾只讀不寫。
-- **驗證評估**：讓載入的模型**實際跑過**資料集的 test / valid split，重新計算 mAP、逐類別 AP 與召回率、混淆矩陣與 PR 曲線——不是沿用訓練時記錄的舊數值。多個模型跑同一份測試集即可做公平的消融比較，並附「AP × 標註框尺寸」散點圖用於分析小物件表現。
+- **驗證評估**：讓載入的模型**實際跑過**資料集的 test / valid split，重新計算 mAP、逐類別 AP 與召回率、混淆矩陣與 PR 曲線——不是沿用訓練時記錄的舊數值。多個模型跑同一份測試集即可做公平的消融比較，並附「AP × 標註框尺寸」散點圖用於分析小物件表現，以及 ultralytics 的標註／預測縮圖拼接。
+- **逐張檢視（看圖驗收）**：在「驗證評估」分頁讓模型逐張跑過 split，把**標註框與預測框疊在同一張圖上**，以顏色、線型與標籤區分正確、漏抓、誤報與類別錯；可依類別與錯誤類型篩選排序、拖動信心門檻即時重新配對（不重新推論），並把 320 與 640、或 `.pt` 與 `.tflite`（僅 Docker）的結果逐張並排。可依篩選條件匯出自足 HTML 給他人檢視。畫面上的計數明確標示為「非評估指標」。
 - **成果報告**：把一或多份評估打包成單一自足的 HTML（圖表全部內嵌，離線可讀），瀏覽器列印即可另存 PDF。
 - **權重登錄簿**：以權重檔內容的 SHA-256 為身分的長期帳本，自動記錄每顆權重的**完整訓練超參數**（整份 `args.yaml`，實測 116 項）與歷次實測指標（mAP@50、mAP@50-95、Precision、Recall、F1、**Micro-Accuracy / Jaccard index**）。與已載入的 Session 生命週期脫鉤——刪掉模型、重啟系統，紀錄都還在，可跨權重排序比較。
 
@@ -71,7 +72,7 @@ npm run dev
 
 ```
 ShowResultsWeb/backend/          FastAPI 後端
-  app/routers/                   API 路由（sessions / datasets / exports / local_library / evaluations / reports / registry / devices / inference / metrics）
+  app/routers/                   API 路由（sessions / datasets / exports / local_library / evaluations / reviews / reports / registry / devices / inference / metrics）
   app/core/envelope.py           統一的 API 回應信封與錯誤契約
   app/db/                        權重登錄簿的資料表與連線層（SQLAlchemy）
   app/services/                  業務邏輯（模型管理、資料集分析、匯出/評估 job、報告產生、登錄簿、裝置探測）
@@ -102,7 +103,7 @@ pytest -v
 
 前端目前以 `npm run build` 作為編譯檢查（尚無自動化測試框架），CI 已涵蓋兩者。
 
-端到端測試需要後端已在執行，並以 `LocalLibrary/` 內的真實檔案驅動，共 16 個階段（API 信封契約、掃描、勾選載入、指標、推論、資料集分析、ONNX/TFLite 匯出、驗證評估、成果報告、登錄簿入帳與雜湊對照、指標交叉驗算、帳本存活性、刪除安全性）：
+端到端測試需要後端已在執行，並以 `LocalLibrary/` 內的真實檔案驅動，共 16 個階段（API 信封契約、掃描、勾選載入、指標、推論、資料集分析、ONNX/TFLite 匯出、驗證評估、成果報告、逐張檢視、登錄簿入帳與雜湊對照、指標交叉驗算、帳本存活性、刪除安全性）：
 
 ```bash
 python e2e_tests/e2e_local_library.py
@@ -121,5 +122,7 @@ python e2e_tests/e2e_local_library.py
 - **權重登錄簿不會自動清理**：刪除模型或評估紀錄都不會連帶刪除帳本內容（那正是它的價值），需要時請從「權重登錄簿」分頁自行移除。
 - **上傳的資料集 ZIP 無法用於評估**：分析階段完全不解壓縮，影像位元組在請求結束後即釋放。請改用本機資料夾。
 - **評估未提供 COCO 式分桶 AP**：以「每類別 AP × 中位框面積」呈現尺度與表現的關係作為替代。
+- **逐張檢視的計數不是評估指標**：它是逐張的貪婪配對（同類別 IoU ≥ 0.5），用來找出有問題的影像，不可與 mAP、Precision、Recall 直接比較。
+- **逐張檢視的 TFLite 推論僅支援 Docker**，且尚未以真實 `.tflite` 完成與 `.pt` 的並排驗收。
 
-更完整的已知限制清單與各項限制的技術背景，請參考 [docs/architecture.md](docs/architecture.md#9-已知限制)。
+更完整的已知限制清單與各項限制的技術背景，請參考 [docs/architecture.md](docs/architecture.md#12-已知限制)。

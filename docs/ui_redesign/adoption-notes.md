@@ -4,7 +4,9 @@
 設計方向本身見 `redesign-proposal.dc.html`，現況樣板見 `current-state.dc.html`。
 
 **目前狀態：B1–B4 全部定案；基礎建設層、全域 shell 與「模型與裝置」分頁已完成遷移。**
-其餘五個分頁的內容區仍是舊樣式。
+其餘五個分頁的內容區仍是舊樣式。例外是「驗證評估」分頁新增的**逐張檢視模式**（`components/review/`）：
+新功能直接以 Nocturne 撰寫，同一分頁的「指標評估」模式仍是舊樣式，兩者並存到該分頁遷移為止。
+框的語意色直接吃 token（正確 success、誤報 danger、漏抓 warning、類別錯 `cat-12`），`Thrips_Damage` 指派 `cat-8`。
 
 ---
 
