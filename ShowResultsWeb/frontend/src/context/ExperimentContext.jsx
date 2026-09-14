@@ -7,11 +7,13 @@ import { useModelExport } from './hooks/useModelExport';
 import { useLocalLibrary } from './hooks/useLocalLibrary';
 import { useEvaluation } from './hooks/useEvaluation';
 import { useRegistry } from './hooks/useRegistry';
+import { useReview } from './hooks/useReview';
 
 const ExperimentContext = createContext();
 
-// 這個 Provider 是八個獨立 hook（session / device / live-demo / dataset / export /
-// local-library / evaluation / registry 狀態）的組合層，
+// 這個 Provider 是九個獨立 hook（session / device / live-demo / dataset / export /
+// local-library / evaluation / registry / review 狀態）的組合層，
+// 值是扁平 spread 的——後 spread 的同名欄位會靜默蓋掉前面的，新 hook 的回傳值一律加前綴。
 // 目的是讓既有的 useExperiment() 呼叫點維持單一、扁平的 API，不必逐一遷移。
 export const ExperimentProvider = ({ children }) => {
   // 'init', 'metrics', 'demo', 'dataset', 'evaluate', 'registry'
@@ -25,6 +27,7 @@ export const ExperimentProvider = ({ children }) => {
   const localLibraryState = useLocalLibrary();
   const evaluationState = useEvaluation();
   const registryState = useRegistry();
+  const reviewState = useReview();
 
   // 載入回應同時帶回 sessions 與 datasets 兩份快照，分屬不同 hook——
   // 與 deleteSession 同樣的理由，跨 hook 的協調邏輯放在 Provider 層。
@@ -57,6 +60,7 @@ export const ExperimentProvider = ({ children }) => {
       ...localLibraryState,
       ...evaluationState,
       ...registryState,
+      ...reviewState,
       deleteSession,
       registerLocalLibrarySelection,
       activeTab,

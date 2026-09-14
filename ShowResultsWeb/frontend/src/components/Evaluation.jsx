@@ -5,7 +5,15 @@ import EvalLauncher from './evaluation/EvalLauncher';
 import EvalJobList from './evaluation/EvalJobList';
 import EvalResultDetail from './evaluation/EvalResultDetail';
 import ReportPanel from './evaluation/ReportPanel';
+import ReviewWorkspace from './review/ReviewWorkspace';
 import Lightbox from './Lightbox';
+
+// 分頁內的兩種模式。逐張檢視與指標評估吃同一組輸入（模型＋資料集＋split），
+// 放在同一個分頁而不另開第 7 個分頁（adoption-notes.md B3：nav 維持 6 個分頁）。
+const MODES = [
+  { value: 'metrics', label: '指標評估' },
+  { value: 'review', label: '逐張檢視' },
+];
 
 // 驗證評估分頁的協調器。
 //
@@ -13,7 +21,7 @@ import Lightbox from './Lightbox';
 // 子系統：消融分析顯示的是訓練當時寫進 results.png 的舊數字，而那些數字可能來自
 // 不同的資料集，因此模型之間並不真的可比。
 const Evaluation = () => {
-  const { evalJobs, deleteEvaluation, isUnzipped } = useExperiment();
+  const { evalJobs, deleteEvaluation, isUnzipped, reviewView, setReviewView } = useExperiment();
 
   const [selectedIds, setSelectedIds] = useState([]);
   const [focusedId, setFocusedId] = useState(null);
@@ -69,8 +77,38 @@ const Evaluation = () => {
     );
   }
 
+  const modeSwitch = (
+    <div role="tablist" aria-label="驗證評估模式" className="flex gap-1 mb-6 border-b border-ds-neutral-800">
+      {MODES.map((mode) => (
+        <button
+          key={mode.value}
+          role="tab"
+          aria-selected={reviewView === mode.value}
+          onClick={() => setReviewView(mode.value)}
+          className={`px-4 py-2 -mb-px border-b-2 text-sm transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 ${
+            reviewView === mode.value
+              ? 'border-accent text-ink'
+              : 'border-transparent text-ds-neutral-500 hover:text-ink'
+          }`}
+        >
+          {mode.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (reviewView === 'review') {
+    return (
+      <>
+        {modeSwitch}
+        <ReviewWorkspace />
+      </>
+    );
+  }
+
   return (
     <>
+      {modeSwitch}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-6">
           <EvalLauncher />
