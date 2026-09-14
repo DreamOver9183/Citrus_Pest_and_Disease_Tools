@@ -154,7 +154,8 @@ def test_write_data_yaml_points_at_the_real_split(tmp_path):
     assert content["path"] == str(tmp_path / "work").replace("\\", "/")
     assert content["val"] == "test/images"
     assert content["names"] == {0: "Aphid", 1: "Canker"}
-    assert "115" not in str(content), "不得混入資料集自帶 yaml 的他機路徑"
+    # 不能用 "115" 判斷：pytest 的暫存目錄是 pytest-<執行次數>，跑到第 115 次就會誤判
+    assert "柑橘病蟲害專題" not in str(content), "不得混入資料集自帶 yaml 的他機路徑"
 
 
 # --- job 生命週期 -------------------------------------------------------------
