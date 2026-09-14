@@ -7,8 +7,8 @@
 // color 必須是完整靜態 Tailwind 字串（JIT 掃不到樣板字串組出的 class）。
 // type 只有 'pest' 會顯示紅點，其餘為琥珀點（見 ResultCard）。
 export const CLASS_MAP = {
-  // === 現行 8 類別模型（YOLO26n_P2_Citrus v5 / v8）===
-  // 這是目前所有 checkpoint 實際輸出的類別名，必須與 model.names 完全一致（含大小寫）。
+  // === 現行 9 類別模型（v5.5 起；v5 / v8 checkpoint 為前 8 類）===
+  // 這是 checkpoint 實際輸出的類別名，必須與 model.names 完全一致（含大小寫）。
   'Oily_Spot': { name: '油斑病 (Oily Spot)', type: 'damage', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
   'Canker': { name: '潰瘍病 (Canker)', type: 'damage', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
   'Sooty_Mold': { name: '煤煙病 (Sooty Mold)', type: 'damage', color: 'bg-slate-500/10 text-slate-300 border-slate-500/20' },
@@ -17,6 +17,8 @@ export const CLASS_MAP = {
   'Citrus_Leaf_Miner': { name: '潛葉蛾 (Leaf Miner)', type: 'pest', color: 'bg-lime-500/10 text-lime-400 border-lime-500/20' },
   'Thrips': { name: '薊馬 (Thrips)', type: 'pest', color: 'bg-violet-500/10 text-violet-400 border-violet-500/20' },
   'Aphid': { name: '蚜蟲 (Aphid)', type: 'pest', color: 'bg-orange-500/10 text-orange-400 border-orange-500/20' },
+  // v5.5 新增。採「一張葉子一個框」的標註約定，框會明顯比其他病斑大。
+  'Thrips_Damage': { name: '薊馬葉害 (Thrips Damage)', type: 'damage', color: 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20' },
 
   // === 舊版 12 類別模型（保留以相容既有權重檔）===
   'aphid': { name: '蚜蟲 (Aphid)', type: 'pest', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
